@@ -7,12 +7,48 @@ import logic
 log = logging.getLogger("chore.notify")
 
 
+def _build_urls(conn):
+    """Construct Apprise URL(s) from the configured service and its credentials."""
+    service = logic.get_setting(conn, "notify_service", "none") or "none"
+    g = lambda k: (logic.get_setting(conn, k, "") or "").strip()
+    if service == "pushover":
+        app, user = g("notify_pushover_app_token"), g("notify_pushover_user_key")
+        return ["pover://%s/%s" % (app, user)] if app and user else []
+    if service == "telegram":
+        token, chat = g("notify_telegram_token"), g("notify_telegram_chatid")
+        return ["tgram://%s/%s" % (token, chat)] if token and chat else []
+    if service == "discord":
+        url = g("notify_discord_webhook")
+        return [url] if url else []
+    if service == "slack":
+        url = g("notify_slack_webhook")
+        return [url] if url else []
+    if service == "ntfy":
+        topic, host = g("notify_ntfy_topic"), g("notify_ntfy_host").rstrip("/")
+        if not topic:
+            return []
+        if host:
+            bare = host.replace("https://", "").replace("http://", "")
+            scheme = "ntfys" if host.startswith("https") else "ntfy"
+            return ["%s://%s/%s" % (scheme, bare, topic)]
+        return ["ntfy://%s" % topic]   # public ntfy.sh
+    if service == "gotify":
+        host, token = g("notify_gotify_url").rstrip("/"), g("notify_gotify_token")
+        if host and token:
+            bare = host.replace("https://", "").replace("http://", "")
+            return ["gotifys://%s/%s" % (bare, token)]
+        return []
+    if service == "apprise":
+        raw = g("notify_urls")
+        return [u for u in (line.strip() for line in raw.splitlines()) if u]
+    return []   # "none" or unknown
+
+
 def send(conn, title, message):
     """Best-effort Apprise notification. Returns True on success, never raises."""
-    urls_raw = logic.get_setting(conn, "notify_urls", "") or ""
-    urls = [u.strip() for u in urls_raw.splitlines() if u.strip()]
+    urls = _build_urls(conn)
     if not urls:
-        log.warning("No notification URLs configured; skipping: %s", title)
+        log.warning("No notification service configured; skipping: %s", title)
         return False
     try:
         import apprise

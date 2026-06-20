@@ -375,6 +375,17 @@ def settings_view(conn):
         "program_start": g("program_start_date", ""),
         "program_end": g("program_end_date", ""),
         "reward": g("scoreboard_reward_text", ""),
+        "notify_service": g("notify_service", "none"),
+        "notify_pushover_app_token": g("notify_pushover_app_token", ""),
+        "notify_pushover_user_key": g("notify_pushover_user_key", ""),
+        "notify_telegram_token": g("notify_telegram_token", ""),
+        "notify_telegram_chatid": g("notify_telegram_chatid", ""),
+        "notify_discord_webhook": g("notify_discord_webhook", ""),
+        "notify_slack_webhook": g("notify_slack_webhook", ""),
+        "notify_ntfy_topic": g("notify_ntfy_topic", ""),
+        "notify_ntfy_host": g("notify_ntfy_host", ""),
+        "notify_gotify_url": g("notify_gotify_url", ""),
+        "notify_gotify_token": g("notify_gotify_token", ""),
         "notify_urls": g("notify_urls", ""),
         "passphrase_required_val": g("passphrase_required", "0") == "1",
         "specials": [dict(r) for r in logic.special_periods(conn)],
@@ -872,8 +883,15 @@ def admin_settings_appconfig():
 @require_admin
 def admin_settings_notify():
     conn = get_db()
-    logic.set_setting(conn, "notify_urls",
-                      (request.form.get("notify_urls") or "").strip())
+    f = lambda k: (request.form.get(k) or "").strip()
+    logic.set_setting(conn, "notify_service", f("notify_service") or "none")
+    for key in ("notify_pushover_app_token", "notify_pushover_user_key",
+                "notify_telegram_token", "notify_telegram_chatid",
+                "notify_discord_webhook", "notify_slack_webhook",
+                "notify_ntfy_topic", "notify_ntfy_host",
+                "notify_gotify_url", "notify_gotify_token",
+                "notify_urls"):
+        logic.set_setting(conn, key, f(key))
     logic.set_setting(conn, "passphrase_required",
                       "1" if request.form.get("passphrase_required") else "0")
     conn.commit()

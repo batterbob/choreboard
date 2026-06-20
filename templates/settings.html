@@ -228,27 +228,133 @@
     <div class="set-hint">"Paused" weeks don't count toward goals or streaks. "{{ outdoor_label }} credit" auto-adds the given minutes each camp weekday.</div>
   </section>
 
-  {# ---- Notifications (Apprise) ---- #}
+  {# ---- Notifications ---- #}
   <h2 class="admin-section-h">Notifications</h2>
   <section class="card">
     <form method="post" action="/admin/settings/notify">
+
       <div class="set-row">
-        <label style="flex:1">Apprise URLs (one per line)
-          <textarea name="notify_urls" class="set-text wide" rows="5"
-                    placeholder="pover://AppToken/UserKey&#10;tgram://BotToken/ChatID&#10;slack://TokenA/TokenB/TokenC">{{ notify_urls }}</textarea>
+        <label>Service
+          <select name="notify_service" id="notify-service" class="add-type" onchange="showNotifyFields()">
+            <option value="none"{{ ' selected' if notify_service == 'none' else '' }}>None (disabled)</option>
+            <option value="pushover"{{ ' selected' if notify_service == 'pushover' else '' }}>Pushover</option>
+            <option value="telegram"{{ ' selected' if notify_service == 'telegram' else '' }}>Telegram</option>
+            <option value="discord"{{ ' selected' if notify_service == 'discord' else '' }}>Discord</option>
+            <option value="slack"{{ ' selected' if notify_service == 'slack' else '' }}>Slack</option>
+            <option value="ntfy"{{ ' selected' if notify_service == 'ntfy' else '' }}>ntfy</option>
+            <option value="gotify"{{ ' selected' if notify_service == 'gotify' else '' }}>Gotify</option>
+            <option value="apprise"{{ ' selected' if notify_service == 'apprise' else '' }}>Apprise (advanced — raw URLs)</option>
+          </select>
         </label>
       </div>
-      <div class="set-hint">
-        Apprise supports 80+ services — Pushover, Telegram, Slack, Discord, ntfy, email, and more.
-        Format: <code>pover://app_token/user_key</code>, <code>tgram://bottoken/chatid</code>, <code>ntfy://topic</code>.
-        See <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noopener">Apprise wiki</a> for all URL formats.
+
+      {# --- Pushover --- #}
+      <div id="fields-pushover" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>App API Token
+            <input type="text" name="notify_pushover_app_token" value="{{ notify_pushover_app_token }}" class="set-text wide">
+          </label>
+        </div>
+        <div class="set-row">
+          <label>User Key
+            <input type="text" name="notify_pushover_user_key" value="{{ notify_pushover_user_key }}" class="set-text wide">
+          </label>
+        </div>
+        <div class="set-hint">Find these at <a href="https://pushover.net" target="_blank" rel="noopener">pushover.net</a> — App token from your app, User Key from your account dashboard.</div>
       </div>
+
+      {# --- Telegram --- #}
+      <div id="fields-telegram" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>Bot Token
+            <input type="text" name="notify_telegram_token" value="{{ notify_telegram_token }}" class="set-text wide">
+          </label>
+        </div>
+        <div class="set-row">
+          <label>Chat ID
+            <input type="text" name="notify_telegram_chatid" value="{{ notify_telegram_chatid }}" class="set-text">
+          </label>
+        </div>
+        <div class="set-hint">Create a bot via <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> to get the token. Get your Chat ID by messaging <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a>.</div>
+      </div>
+
+      {# --- Discord --- #}
+      <div id="fields-discord" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>Webhook URL
+            <input type="text" name="notify_discord_webhook" value="{{ notify_discord_webhook }}" class="set-text wide" placeholder="https://discord.com/api/webhooks/...">
+          </label>
+        </div>
+        <div class="set-hint">In Discord: channel settings → Integrations → Webhooks → New Webhook → Copy URL.</div>
+      </div>
+
+      {# --- Slack --- #}
+      <div id="fields-slack" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>Incoming Webhook URL
+            <input type="text" name="notify_slack_webhook" value="{{ notify_slack_webhook }}" class="set-text wide" placeholder="https://hooks.slack.com/services/...">
+          </label>
+        </div>
+        <div class="set-hint">Create an incoming webhook at <a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noopener">api.slack.com</a>.</div>
+      </div>
+
+      {# --- ntfy --- #}
+      <div id="fields-ntfy" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>Topic
+            <input type="text" name="notify_ntfy_topic" value="{{ notify_ntfy_topic }}" class="set-text" placeholder="my-family-tracker-abc123">
+          </label>
+        </div>
+        <div class="set-row">
+          <label>Self-hosted server URL <span class="set-hint">(leave blank to use ntfy.sh)</span>
+            <input type="text" name="notify_ntfy_host" value="{{ notify_ntfy_host }}" class="set-text wide" placeholder="https://ntfy.example.com">
+          </label>
+        </div>
+        <div class="set-hint">Subscribe to your topic in the <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy app</a>. Use a hard-to-guess topic name since ntfy.sh topics are public.</div>
+      </div>
+
+      {# --- Gotify --- #}
+      <div id="fields-gotify" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>Server URL
+            <input type="text" name="notify_gotify_url" value="{{ notify_gotify_url }}" class="set-text wide" placeholder="https://gotify.example.com">
+          </label>
+        </div>
+        <div class="set-row">
+          <label>App Token
+            <input type="text" name="notify_gotify_token" value="{{ notify_gotify_token }}" class="set-text wide">
+          </label>
+        </div>
+        <div class="set-hint">Create an app in your Gotify server and copy its token.</div>
+      </div>
+
+      {# --- Apprise raw --- #}
+      <div id="fields-apprise" class="notify-fields" hidden>
+        <div class="set-row">
+          <label style="flex:1">Apprise URLs (one per line)
+            <textarea name="notify_urls" class="set-text wide" rows="4"
+                      placeholder="pover://AppToken/UserKey&#10;tgram://BotToken/ChatID">{{ notify_urls }}</textarea>
+          </label>
+        </div>
+        <div class="set-hint">Supports 80+ services. See the <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noopener">Apprise wiki</a> for all URL formats.</div>
+      </div>
+
       <div style="margin-top:.75rem">
         <label><input type="checkbox" name="passphrase_required"{{ ' checked' if passphrase_required_val else '' }}>&nbsp;Lock kid pages — kids must enter their passphrase to view their page</label>
       </div>
-      <button class="mini-btn primary" type="submit">Save notifications</button>
+      <button class="mini-btn primary" type="submit" style="margin-top:.75rem">Save notifications</button>
     </form>
   </section>
+
+  <script>
+  function showNotifyFields() {
+    var sel = document.getElementById('notify-service').value;
+    document.querySelectorAll('.notify-fields').forEach(function(el) { el.hidden = true; });
+    var target = document.getElementById('fields-' + sel);
+    if (target) target.hidden = false;
+  }
+  showNotifyFields();
+  </script>
 
   {# ---- Data export ---- #}
   <h2 class="admin-section-h">Data export</h2>
