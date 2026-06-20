@@ -244,10 +244,7 @@
         See <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noopener">Apprise wiki</a> for all URL formats.
       </div>
       <div class="set-row" style="margin-top:.75rem">
-        <label style="display:flex;gap:.5rem;align-items:center">
-          <input type="checkbox" name="passphrase_required"{{ ' checked' if passphrase_required_val else '' }}>
-          Require passphrase for kid pages (when a passphrase is set on a kid)
-        </label>
+        <label style="display:flex;gap:.5rem;align-items:center"><input type="checkbox" name="passphrase_required"{{ ' checked' if passphrase_required_val else '' }}> Lock kid pages — kids must enter their passphrase to view their page</label>
       </div>
       <button class="mini-btn primary" type="submit">Save notifications</button>
     </form>
