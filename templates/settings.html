@@ -92,8 +92,10 @@
           <td colspan="5">
             <form method="post" action="/admin/kid/rename" class="add-form">
               <input type="hidden" name="kid_id" value="{{ k.id }}">
-              <input type="text" name="name" value="{{ k.name }}" class="add-name" placeholder="Name" required>
-              <input type="text" name="slug" value="{{ k.url_slug }}" class="set-text" placeholder="url-slug" pattern="[a-z0-9_-]+" required>
+              <label class="set-hint" style="margin-right:.25rem">Name</label>
+              <input type="text" name="name" value="{{ k.name }}" class="add-name" required>
+              <label class="set-hint" style="margin:0 .25rem 0 .5rem">URL slug</label>
+              <input type="text" name="slug" value="{{ k.url_slug }}" class="set-text" pattern="[a-z0-9_-]+" required>
               <button class="mini-btn primary" type="submit">Save</button>
               <button class="mini-btn" type="button" onclick="toggleEdit('kid-{{ k.id }}')">Cancel</button>
             </form>
