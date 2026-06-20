@@ -1,0 +1,49 @@
+{# Reusable reading/outdoor log section. Expects `s` (the log_section dict). #}
+{% set quick = reading_quick if s.kind == "reading" else outdoor_quick %}
+{% set pct = ((s.weekly / s.target * 100) | round(0, 'floor')) if s.target > 0 else 0 %}
+<section class="card log-card" data-kind="{{ s.kind }}"
+         data-target="{{ s.target }}"
+         data-weekly="{{ s.weekly }}"
+         data-today="{{ s.today_total }}"
+         data-unit="{{ 'hm' if s.kind == 'outdoor' else 'min' }}">
+  <h2>{{ "Reading" if s.kind == "reading" else "Outdoor Time" }}</h2>
+
+  <div class="progress-line weekly-text">
+    This week:
+    {% if s.kind == "outdoor" %}{{ s.weekly_hm }} / {{ s.target_hm }}
+    {% else %}{{ s.weekly }} / {{ s.target }} min{% endif %}
+  </div>
+  <div class="bar"><div class="bar-fill" style="width: {{ [pct, 100] | min }}%"></div></div>
+
+  <div class="today-text">Today: {{ s.today_total }} min logged</div>
+
+  <div class="pace-text">
+    {% if s.met %}Goal met! 🎉
+    {% elif s.pace_state == "behind" %}Need ~{{ s.pace_needed }} min/day to finish by Sunday
+    {% elif s.pace_state == "no_days_left" %}Last day — finish strong!{% endif %}
+  </div>
+
+  <div class="quick-row">
+    {% for q in quick %}
+      <button type="button" class="quick-btn" data-min="{{ q }}">+{{ q }} min</button>
+    {% endfor %}
+  </div>
+
+  <details class="custom">
+    <summary>Enter custom amount</summary>
+    <div class="custom-body">
+      <input type="number" class="custom-input" min="1" max="600" inputmode="numeric"
+             pattern="[0-9]*" placeholder="minutes">
+      <button type="button" class="custom-submit">Add</button>
+    </div>
+  </details>
+
+  <div class="entries">
+    {% if s.entries %}Today:
+      {% for e in s.entries %}
+        <span class="entry"><span class="entry-min">+{{ e.minutes }}</span><button
+          type="button" class="entry-x" data-id="{{ e.id }}" aria-label="remove">✕</button></span>
+      {% endfor %}
+    {% endif %}
+  </div>
+</section>

@@ -1,0 +1,356 @@
+{% macro today_field() %}{% if debug_today %}<input type="hidden" name="today" value="{{ debug_today }}">{% endif %}{% endmacro %}
+{% macro schedule_fields(ch=None) %}
+  <span class="sched-fieldset">
+    <span class="sched-tag">Scheduled only —</span>
+    due
+    <select name="due_weekday" class="add-type">
+      {% for i, dn in [(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri'),(5,'Sat'),(6,'Sun')] %}
+        <option value="{{ i }}"{{ ' selected' if ch and ch.due_weekday == i else '' }}>{{ dn }}</option>
+      {% endfor %}
+    </select>, remind
+    <input type="number" name="reminder_lead_days" min="0" max="14" class="set-num"
+           value="{{ ch.reminder_lead_days if ch and ch.reminder_lead_days is not none else 5 }}">
+    days before, label
+    <input type="text" name="due_label" class="add-name" placeholder="e.g. Monday night"
+           value="{{ ch.due_label if ch and ch.due_label else '' }}">
+  </span>
+{% endmacro %}
+{% macro alt_fields(ch=None) %}
+  <span class="alt-fieldset">
+    <span class="sched-tag">Every other day —</span>
+    due on
+    <select name="alt_day_parity" class="add-type">
+      <option value="0"{{ ' selected' if ch and ch.alt_day_parity == 0 else '' }}>Even days (2nd, 4th, 6th…)</option>
+      <option value="1"{{ ' selected' if ch and ch.alt_day_parity is not none and ch.alt_day_parity == 1 else '' }}>Odd days (1st, 3rd, 5th…)</option>
+    </select>
+  </span>
+{% endmacro %}
+{% macro assign_cell(ch, kids_list, rotation=[]) %}
+  {% if ch.type == 'as_needed' %}
+    <span class="who-adhoc">Assigned in Assignments &amp; overrides below</span>
+  {% else %}
+    {% set ns = namespace(current_kid=None) %}
+    {% if ch.is_rotating %}
+      {% for r in rotation %}{% if r.chore_id == ch.id %}{% set ns.current_kid = r.kid %}{% endif %}{% endfor %}
+    {% endif %}
+    <form method="post" action="/admin/chore/set-who" class="inline-form">
+      {{ today_field() }}
+      <input type="hidden" name="chore_id" value="{{ ch.id }}">
+      <select name="mode" class="add-type" onchange="this.form.submit()">
+        {% if ch.is_rotating %}
+          <option value="rotating" disabled selected>Rotates{% if ns.current_kid %} ({{ ns.current_kid }}){% endif %}</option>
+        {% endif %}
+        <option value="none"{{ ' selected' if not ch.is_rotating and ch.assigned_ids | length == 0 else '' }}>— Unassigned</option>
+        {% if kids_list | length >= 2 %}
+          <option value="both"{{ ' selected' if not ch.is_rotating and ch.assigned_ids | length >= 2 else '' }}>{{ kids_list[0].name }} &amp; {{ kids_list[1].name }}</option>
+        {% endif %}
+        {% for k in kids_list %}
+          <option value="kid_{{ k.id }}"{{ ' selected' if not ch.is_rotating and ch.assigned_ids | length == 1 and k.id in ch.assigned_ids else '' }}>{{ k.name }} only</option>
+        {% endfor %}
+        {% for k in kids_list %}
+          {% if not ch.is_rotating or k.name != ns.current_kid %}
+            <option value="rotate_{{ k.id }}">Rotate → {{ k.name }} starts</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </form>
+  {% endif %}
+{% endmacro %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Summer Tracker — Admin</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<div class="page admin">
+
+  <header class="admin-bar">
+    <div>
+      <h1 class="admin-title">Summer Tracker Admin</h1>
+      <div class="today-date">{{ today_long }}</div>
+    </div>
+    <nav class="admin-nav">
+      <a href="/andrew">Andrew</a>
+      <a href="/daniel">Daniel</a>
+      <a href="/admin">Dashboard</a>
+      <a href="/status">Status</a>
+      <a href="/admin/history{{ ('?today=' + debug_today) if debug_today else '' }}">History</a>
+      <a href="/admin/logs{{ ('?today=' + debug_today) if debug_today else '' }}">Logs</a>
+      <a href="/admin/settings">Settings</a>
+      <a href="/admin/logout">Log out</a>
+    </nav>
+  </header>
+
+  {% if not in_program %}
+    <div class="banner banner-break">
+      <div class="banner-big">Summer Tracker isn't running right now ☀️</div>
+    </div>
+  {% endif %}
+
+  {# ---- Today's status ---- #}
+  <h2 class="admin-section-h">Today</h2>
+  <div class="status-grid">
+    {% for c in cards %}
+      <section class="card status-card">
+        <h2 class="status-name">{{ c.name }}</h2>
+        {% if c.checklist_done %}
+          <div class="big-indicator green">✅ Checklist done today</div>
+          {% if c.completed_time %}<div class="status-when">Completed at {{ c.completed_time }}</div>{% endif %}
+        {% else %}
+          <div class="big-indicator red">❌ Checklist not done yet</div>
+        {% endif %}
+        {% if c.as_needed %}
+          <div class="status-sub">As-needed:</div>
+          {% for a in c.as_needed %}
+            {% if a.done %}
+              <div class="status-line status-good">✓ {{ a.name }} <span class="status-when">{{ a.time }}</span></div>
+            {% else %}
+              <div class="status-line status-pending">• {{ a.name }} — pending</div>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      </section>
+    {% endfor %}
+  </div>
+
+  {# ---- This week's progress ---- #}
+  <h2 class="admin-section-h">This week</h2>
+  <div class="status-grid">
+    {% for c in cards %}
+      <section class="card status-card">
+        <h2 class="status-name">{{ c.name }}</h2>
+
+        <div class="status-line">Checklist done: <strong>{{ c.checklist_days }} of {{ c.checklist_elapsed }} days</strong> so far this week</div>
+
+        {% if c.prorated %}
+          <div class="proration-note">Targets prorated to {{ c.active_days }}/7 days:
+            Reading {{ c.reading_target }}, Outdoor {{ c.outdoor_target }} min</div>
+        {% endif %}
+
+        <div class="status-metric">
+          <div class="status-metric-head"><span>Reading</span><span>{{ c.reading.weekly }} / {{ c.reading.target }} min</span></div>
+          <div class="bar"><div class="bar-fill" style="width: {{ [ (c.reading.weekly * 100 // c.reading.target) if c.reading.target else 0, 100] | min }}%"></div></div>
+          <div class="pace-text">
+            {% if c.reading.met %}Goal met ✓
+            {% elif c.reading.pace_state == "behind" %}Need ~{{ c.reading.pace_needed }} min/day
+            {% elif c.reading.pace_state == "no_days_left" %}Week over{% endif %}
+          </div>
+        </div>
+
+        <div class="status-metric">
+          <div class="status-metric-head"><span>Outdoor</span><span>{{ c.outdoor.weekly_hm }} / {{ c.outdoor.target_hm }}</span></div>
+          <div class="bar"><div class="bar-fill" style="width: {{ [ (c.outdoor.weekly * 100 // c.outdoor.target) if c.outdoor.target else 0, 100] | min }}%"></div></div>
+          <div class="pace-text">
+            {% if c.outdoor.met %}Goal met ✓
+            {% elif c.outdoor.pace_state == "behind" %}Need ~{{ c.outdoor.pace_needed }} min/day
+            {% elif c.outdoor.pace_state == "no_days_left" %}Week over{% endif %}
+          </div>
+        </div>
+
+        {% if c.last_week_bonus is none %}
+          <div class="status-bonus status-muted">Last week's bonus: —</div>
+        {% elif c.last_week_bonus %}
+          <div class="status-bonus status-good">Last week's bonus: unlocked ✓</div>
+        {% else %}
+          <div class="status-bonus status-bad">Last week's bonus: not earned ✗</div>
+        {% endif %}
+      </section>
+    {% endfor %}
+  </div>
+
+  {# ---- Chore management ---- #}
+  <h2 class="admin-section-h">Chores</h2>
+  <section class="card">
+    <table class="chore-table">
+      <tr><th>Name</th><th>Type</th><th>Who does it</th><th>Active</th><th>Edit</th><th></th></tr>
+      {% for ch in all_chores %}
+        <tr>
+          <td>{{ ch.name }}</td>
+          <td>
+            <form method="post" action="/admin/chore/set-type" class="inline-form">
+              {{ today_field() }}<input type="hidden" name="chore_id" value="{{ ch.id }}">
+              <select name="type" class="add-type" onchange="this.form.submit()">
+                <option value="daily"{{ ' selected' if ch.type == 'daily' else '' }}>Daily</option>
+                <option value="alternate_daily"{{ ' selected' if ch.type == 'alternate_daily' else '' }}>Every other day</option>
+                <option value="weekly"{{ ' selected' if ch.type == 'weekly' else '' }}>Weekly</option>
+                <option value="as_needed"{{ ' selected' if ch.type == 'as_needed' else '' }}>As-needed</option>
+                <option value="scheduled"{{ ' selected' if ch.type == 'scheduled' else '' }}>Scheduled</option>
+              </select>
+            </form>
+            {% if ch.type == 'scheduled' %}<span class="sched-meta">({{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][ch.due_weekday] if ch.due_weekday is not none else '?' }})</span>{% endif %}
+            {% if ch.type == 'alternate_daily' %}<span class="sched-meta">({{ 'even' if ch.alt_day_parity == 0 else 'odd' }} days)</span>{% endif %}
+          </td>
+          <td class="who-cell">{{ assign_cell(ch, kids_list, rotation) }}</td>
+          <td>
+            <form method="post" action="/admin/chore/toggle" class="inline-form">
+              {{ today_field() }}<input type="hidden" name="chore_id" value="{{ ch.id }}">
+              <button class="mini-btn {{ 'on' if ch.active else 'off' }}">{{ 'On' if ch.active else 'Off' }}</button>
+            </form>
+          </td>
+          <td>
+            <button class="mini-btn" type="button" onclick="toggleEdit({{ ch.id }})">Edit</button>
+          </td>
+          <td>
+            <form method="post" action="/admin/chore/delete" class="inline-form"
+                  onsubmit="return confirm('Delete this chore? Removed from kid pages; history kept.');">
+              {{ today_field() }}<input type="hidden" name="chore_id" value="{{ ch.id }}">
+              <button class="mini-btn danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+        <tr id="edit-{{ ch.id }}" class="edit-row" hidden>
+          <td colspan="6">
+            <form method="post" action="/admin/chore/edit" class="add-form">
+              {{ today_field() }}<input type="hidden" name="chore_id" value="{{ ch.id }}">
+              <input type="text" name="name" value="{{ ch.name }}" class="add-name" required>
+              <select name="type" class="add-type type-select" onchange="syncFields(this)">
+                <option value="daily"{{ ' selected' if ch.type == 'daily' else '' }}>Daily</option>
+                <option value="alternate_daily"{{ ' selected' if ch.type == 'alternate_daily' else '' }}>Every other day</option>
+                <option value="weekly"{{ ' selected' if ch.type == 'weekly' else '' }}>Weekly</option>
+                <option value="as_needed"{{ ' selected' if ch.type == 'as_needed' else '' }}>As-needed</option>
+                <option value="scheduled"{{ ' selected' if ch.type == 'scheduled' else '' }}>Scheduled</option>
+              </select>
+              {{ schedule_fields(ch) }}
+              {{ alt_fields(ch) }}
+              <button class="mini-btn primary" type="submit">Save</button>
+              <button class="mini-btn" type="button" onclick="toggleEdit({{ ch.id }})">Cancel</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+    <form method="post" action="/admin/chore/add" class="add-form">
+      {{ today_field() }}
+      <input type="text" name="name" placeholder="New chore name" class="add-name" required>
+      <select name="type" class="add-type type-select" onchange="syncFields(this)">
+        <option value="daily">Daily</option>
+        <option value="alternate_daily">Every other day</option>
+        <option value="weekly">Weekly</option>
+        <option value="as_needed">As-needed</option>
+        <option value="scheduled">Scheduled</option>
+      </select>
+      {{ schedule_fields() }}
+      {{ alt_fields() }}
+      <button class="mini-btn primary" type="submit">Add chore</button>
+    </form>
+    <div class="set-hint">Set <strong>who does each chore</strong> using the dropdown in the "Who does it" column.
+      Choose a kid, both, or <strong>Rotate → [name] starts</strong> to alternate weekly.
+      "Scheduled" = recurring on a weekday with a countdown on the kid's page.</div>
+  </section>
+
+  {# ---- Per-kid assignments & overrides ---- #}
+  <h2 class="admin-section-h">Assignments &amp; overrides</h2>
+  <section class="card">
+    <div class="status-sub">Mark a daily chore done today</div>
+    <div class="status-grid">
+      {% for c in cards %}
+        <div{% if loop.last %} class="overrides-right"{% endif %}>
+          <h3 class="status-name">{{ c.name }}</h3>
+          {% if c.daily_incomplete %}
+            {% for ch in c.daily_incomplete %}
+              <form method="post" action="/admin/checklist/override" class="row-form">
+                {{ today_field() }}
+                <input type="hidden" name="kid_id" value="{{ c.id }}">
+                <input type="hidden" name="chore_id" value="{{ ch.id }}">
+                <button class="mini-btn">✓ {{ ch.name }}</button>
+              </form>
+            {% endfor %}
+          {% else %}
+            <div class="status-line status-good">All daily chores done ✓</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="status-sub">As-needed assignments</div>
+    <div class="status-grid">
+      {% for c in cards %}
+        <div{% if loop.last %} class="overrides-right"{% endif %}>
+          <h3 class="status-name">{{ c.name }}</h3>
+          {% for a in c.as_needed %}
+            {% if a.done %}
+              <div class="status-line status-good">✓ {{ a.name }} <span class="status-when">{{ a.time }}</span></div>
+            {% else %}
+              <form method="post" action="/admin/assign/complete" class="row-form">
+                {{ today_field() }}<input type="hidden" name="assignment_id" value="{{ a.id }}">
+                <span class="row-label">• {{ a.name }} (pending)</span>
+                <button class="mini-btn">Mark complete</button>
+              </form>
+            {% endif %}
+          {% endfor %}
+          {% for ch in as_needed_chores %}
+            <form method="post" action="/admin/assign" class="row-form">
+              {{ today_field() }}
+              <input type="hidden" name="kid_id" value="{{ c.id }}">
+              <input type="hidden" name="chore_id" value="{{ ch.id }}">
+              <button class="mini-btn primary">Assign</button>
+              <span class="row-label">{{ ch.name }}</span>
+            </form>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ---- Rotating chore manager ---- #}
+  <h2 class="admin-section-h">Rotating chores</h2>
+  <section class="card">
+    <table class="chore-table">
+      <tr><th>Chore</th><th>This week</th><th></th></tr>
+      {% for r in rotation %}
+        <tr>
+          <td>{{ r.chore }}</td>
+          <td>{{ r.kid }}</td>
+          <td>
+            <form method="post" action="/admin/rotation/swap-one" class="inline-form">
+              {{ today_field() }}<input type="hidden" name="chore_id" value="{{ r.chore_id }}">
+              <button class="mini-btn" type="submit">Swap</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+    {% if rotation %}
+      <form method="post" action="/admin/rotation/swap" class="add-form"
+            onsubmit="return confirm('Swap ALL rotating chores between the kids this week?');">
+        {{ today_field() }}
+        <button class="mini-btn" type="submit">Swap all this week</button>
+      </form>
+    {% endif %}
+  </section>
+
+</div>
+<script>
+function toggleEdit(id) {
+  var row = document.getElementById("edit-" + id);
+  if (row) { row.hidden = !row.hidden; }
+}
+function syncFields(sel) {
+  var form = sel.closest("form");
+  if (!form) { return; }
+  var fs = form.querySelector(".sched-fieldset");
+  if (fs) {
+    var schedOn = sel.value === "scheduled";
+    fs.classList.toggle("sched-disabled", !schedOn);
+    var si = fs.querySelectorAll("input, select");
+    for (var i = 0; i < si.length; i++) { si[i].disabled = !schedOn; }
+  }
+  var af = form.querySelector(".alt-fieldset");
+  if (af) {
+    var altOn = sel.value === "alternate_daily";
+    af.classList.toggle("sched-disabled", !altOn);
+    var ai = af.querySelectorAll("select");
+    for (var j = 0; j < ai.length; j++) { ai[j].disabled = !altOn; }
+  }
+}
+var _typeSelects = document.querySelectorAll(".type-select");
+for (var i = 0; i < _typeSelects.length; i++) { syncFields(_typeSelects[i]); }
+
+</script>
+</body>
+</html>

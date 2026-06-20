@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="60">
+  <title>Summer Tracker — Status</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<div class="page admin">
+
+  <header class="admin-bar">
+    <div>
+      <h1 class="admin-title">Summer Tracker</h1>
+      <div class="today-date">{{ today_long }}</div>
+    </div>
+    <nav class="admin-nav">
+      <a href="/andrew">Andrew</a>
+      <a href="/daniel">Daniel</a>
+      <a href="/admin">Dashboard</a>
+      <a href="/status">Status</a>
+      <a href="/admin/history">History</a>
+      <a href="/admin/logs">Logs</a>
+      <a href="/admin/settings">Settings</a>
+      <a href="/admin/logout">Log out</a>
+    </nav>
+  </header>
+
+  {% if not in_program %}
+    <div class="banner banner-break">
+      <div class="banner-big">Summer Tracker isn't running right now ☀️</div>
+    </div>
+  {% endif %}
+
+  <div class="status-grid">
+    {% for c in cards %}
+      <section class="card status-card">
+        <h2 class="status-name">{{ c.name }}</h2>
+
+        {% if c.on_break %}
+          <div class="status-line status-break">On break ☀️ — enjoy the trip!</div>
+        {% endif %}
+
+        {# Checklist #}
+        {% if c.checklist_done %}
+          <div class="status-line status-good">✅ Checklist done{% if c.completed_time %} <span class="status-when">at {{ c.completed_time }}</span>{% endif %}</div>
+        {% else %}
+          <div class="status-line status-bad">❌ Checklist not done yet</div>
+        {% endif %}
+
+        {# As-needed today #}
+        {% if c.as_needed %}
+          <div class="status-sub">As-needed:</div>
+          {% for a in c.as_needed %}
+            {% if a.done %}
+              <div class="status-line status-good">✓ {{ a.name }} <span class="status-when">{{ a.time }}</span></div>
+            {% else %}
+              <div class="status-line status-pending">• {{ a.name }} — pending</div>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+
+        {# Weekly chores #}
+        {% if c.weekly %}
+          <div class="status-sub">This week:</div>
+          {% for w in c.weekly %}
+            {% if w.done %}
+              <div class="status-line status-good">✓ {{ w.name }}</div>
+            {% else %}
+              <div class="status-line status-pending">• {{ w.name }} — not yet</div>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+
+        {# Reading #}
+        <div class="status-metric">
+          <div class="status-metric-head"><span>Reading</span><span>{{ c.reading.weekly }} / {{ c.reading.target }} min</span></div>
+          <div class="bar"><div class="bar-fill" style="width: {{ c.reading.pct }}%"></div></div>
+        </div>
+
+        {# Outdoor #}
+        <div class="status-metric">
+          <div class="status-metric-head"><span>Outdoor</span><span>{{ c.outdoor.weekly_hm }} / {{ c.outdoor.target_hm }}</span></div>
+          <div class="bar"><div class="bar-fill" style="width: {{ c.outdoor.pct }}%"></div></div>
+        </div>
+
+        {# Last week's bonus #}
+        {% if c.last_week_bonus is none %}
+          <div class="status-bonus status-muted">Last week's bonus: —</div>
+        {% elif c.last_week_bonus %}
+          <div class="status-bonus status-good">Last week's bonus: unlocked ✓</div>
+        {% else %}
+          <div class="status-bonus status-bad">Last week's bonus: not earned ✗</div>
+        {% endif %}
+      </section>
+    {% endfor %}
+  </div>
+
+  <div class="status-foot">Auto-refreshes every minute</div>
+</div>
+</body>
+</html>

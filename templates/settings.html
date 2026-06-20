@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Summer Tracker — Settings</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<div class="page admin">
+
+  <header class="admin-bar">
+    <h1 class="admin-title">Settings</h1>
+    <nav class="admin-nav">
+      <a href="/andrew">Andrew</a>
+      <a href="/daniel">Daniel</a>
+      <a href="/admin">Dashboard</a>
+      <a href="/status">Status</a>
+      <a href="/admin/history">History</a>
+      <a href="/admin/logs">Logs</a>
+      <a href="/admin/settings">Settings</a>
+      <a href="/admin/logout">Log out</a>
+    </nav>
+  </header>
+
+  {% if saved %}<div class="saved-banner">Saved ✓</div>{% endif %}
+
+  {# ---- Per-kid targets ---- #}
+  <h2 class="admin-section-h">Weekly targets</h2>
+  <section class="card">
+    <form method="post" action="/admin/settings/targets">
+      {% for k in kids %}
+        <div class="set-row">
+          <span class="set-name">{{ k.name }}</span>
+          <label>Reading (min)
+            <input type="number" name="reading_{{ k.id }}" value="{{ k.reading_target }}" min="1" class="set-num">
+          </label>
+          <label>Outdoor (min)
+            <input type="number" name="outdoor_{{ k.id }}" value="{{ k.outdoor_target }}" min="1" class="set-num">
+          </label>
+        </div>
+      {% endfor %}
+      <button class="mini-btn primary" type="submit">Save targets</button>
+    </form>
+  </section>
+
+  {# ---- Goals & schedule ---- #}
+  <h2 class="admin-section-h">Schedule &amp; reward</h2>
+  <section class="card">
+    <form method="post" action="/admin/settings/general">
+      <div class="set-row">
+        <label>Reminder time (HH:MM or "off")
+          <input type="text" name="reminder_time" value="{{ reminder_time }}" class="set-text">
+        </label>
+      </div>
+      <div class="set-row">
+        <label>Program start (YYYY-MM-DD)
+          <input type="text" name="program_start" value="{{ program_start }}" class="set-text">
+        </label>
+        <label>Program end (YYYY-MM-DD)
+          <input type="text" name="program_end" value="{{ program_end }}" class="set-text">
+        </label>
+      </div>
+      <div class="set-row">
+        <label>Scoreboard reward (shown on kid pages; blank to hide)
+          <input type="text" name="reward" value="{{ reward }}" class="set-text wide">
+        </label>
+      </div>
+      <button class="mini-btn primary" type="submit">Save</button>
+    </form>
+  </section>
+
+  {# ---- Special periods ---- #}
+  <h2 class="admin-section-h">Vacations &amp; camp</h2>
+  <section class="card">
+    <table class="chore-table">
+      <tr><th>Label</th><th>Type</th><th>Start</th><th>End</th><th>Outdoor/day</th><th></th><th></th></tr>
+      {% for sp in specials %}
+        <tr>
+          <td>{{ sp.label }}</td>
+          <td>{{ 'Paused' if sp.type == 'paused' else 'Outdoor credit' }}</td>
+          <td>{{ sp.start_date }}</td>
+          <td>{{ sp.end_date }}</td>
+          <td>{{ sp.outdoor_minutes_per_day if sp.outdoor_minutes_per_day is not none else '—' }}</td>
+          <td><button class="mini-btn" type="button" onclick="toggleEdit({{ sp.id }})">Edit</button></td>
+          <td>
+            <form method="post" action="/admin/special/delete" class="inline-form"
+                  onsubmit="return confirm('Delete this period?');">
+              <input type="hidden" name="id" value="{{ sp.id }}">
+              <button class="mini-btn danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+        <tr id="edit-{{ sp.id }}" class="edit-row" hidden>
+          <td colspan="7">
+            <form method="post" action="/admin/special/edit" class="add-form">
+              <input type="hidden" name="id" value="{{ sp.id }}">
+              <input type="text" name="label" value="{{ sp.label }}" class="add-name" required>
+              <select name="type" class="add-type">
+                <option value="paused"{{ ' selected' if sp.type == 'paused' else '' }}>Paused</option>
+                <option value="outdoor_credit"{{ ' selected' if sp.type == 'outdoor_credit' else '' }}>Outdoor credit</option>
+              </select>
+              <input type="text" name="start_date" value="{{ sp.start_date }}" class="set-text" placeholder="start">
+              <input type="text" name="end_date" value="{{ sp.end_date }}" class="set-text" placeholder="end">
+              <input type="number" name="outdoor_minutes_per_day" value="{{ sp.outdoor_minutes_per_day if sp.outdoor_minutes_per_day is not none else '' }}" class="set-num" placeholder="min/day">
+              <button class="mini-btn primary" type="submit">Save</button>
+              <button class="mini-btn" type="button" onclick="toggleEdit({{ sp.id }})">Cancel</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+    <form method="post" action="/admin/special/add" class="add-form">
+      <input type="text" name="label" placeholder="Label (e.g. Alaska cruise)" class="add-name" required>
+      <select name="type" class="add-type">
+        <option value="paused">Paused</option>
+        <option value="outdoor_credit">Outdoor credit</option>
+      </select>
+      <input type="text" name="start_date" placeholder="2026-07-03" class="set-text">
+      <input type="text" name="end_date" placeholder="2026-07-14" class="set-text">
+      <input type="number" name="outdoor_minutes_per_day" placeholder="min/day" class="set-num">
+      <button class="mini-btn primary" type="submit">Add period</button>
+    </form>
+    <div class="set-hint">"Paused" weeks don't count toward goals or streaks. "Outdoor credit" auto-adds the given minutes each camp weekday.</div>
+  </section>
+
+  {# ---- Pushover ---- #}
+  <h2 class="admin-section-h">Pushover</h2>
+  <section class="card">
+    <form method="post" action="/admin/settings/pushover">
+      <div class="set-row">
+        <label>App token
+          <input type="text" name="pushover_app" value="{{ pushover_app }}" class="set-text wide">
+        </label>
+      </div>
+      <div class="set-row">
+        <label>User key
+          <input type="text" name="pushover_user" value="{{ pushover_user }}" class="set-text wide">
+        </label>
+      </div>
+      <button class="mini-btn primary" type="submit">Save Pushover</button>
+    </form>
+  </section>
+
+  {# ---- Password ---- #}
+  <h2 class="admin-section-h">Admin password</h2>
+  <section class="card">
+    {% if pwerror %}<div class="login-error">Couldn't change password — check the current password and that the new ones match.</div>{% endif %}
+    <form method="post" action="/admin/settings/password">
+      <div class="set-row"><label>Current<input type="password" name="current" class="set-text"></label></div>
+      <div class="set-row"><label>New<input type="password" name="new" class="set-text"></label></div>
+      <div class="set-row"><label>Confirm new<input type="password" name="confirm" class="set-text"></label></div>
+      <button class="mini-btn primary" type="submit">Change password</button>
+    </form>
+  </section>
+
+</div>
+<script>
+function toggleEdit(id) {
+  var row = document.getElementById("edit-" + id);
+  if (row) { row.hidden = !row.hidden; }
+}
+</script>
+</body>
+</html>

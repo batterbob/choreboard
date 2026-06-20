@@ -1,0 +1,15 @@
+services:
+  summer-tracker:
+    build: .
+    ports:
+      - "7823:7823"
+    volumes:
+      - ./data:/app/data
+    # Secrets (ADMIN_PASSWORD, Pushover tokens) come from .env, which is gitignored.
+    # This file stays committed without exposing them.
+    env_file:
+      - .env
+    environment:
+      - PORT=7823
+      - TZ=America/New_York
+    restart: unless-stopped

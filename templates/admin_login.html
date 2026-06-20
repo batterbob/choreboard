@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Summer Tracker — Admin Login</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<div class="page">
+  <header class="topbar">
+    <h1 class="kid-name">Summer Tracker</h1>
+    <div class="today-date">Admin sign in</div>
+  </header>
+
+  <section class="card login-card">
+    {% if error %}<div class="login-error">{{ error }}</div>{% endif %}
+    <form method="post" action="/admin/login">
+      <label class="login-label" for="password">Password</label>
+      <input class="login-input" type="password" id="password" name="password"
+             autocomplete="current-password" autofocus>
+      <button class="login-btn" type="submit">Sign in</button>
+    </form>
+  </section>
+</div>
+</body>
+</html>

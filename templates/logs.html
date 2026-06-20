@@ -1,0 +1,70 @@
+{% macro today_field() %}{% if debug_today %}<input type="hidden" name="today" value="{{ debug_today }}">{% endif %}{% endmacro %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Summer Tracker — Logs</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<div class="page admin">
+
+  <header class="admin-bar">
+    <div>
+      <h1 class="admin-title">Edit logs</h1>
+      <div class="today-date">Week of {{ week_label }}</div>
+    </div>
+    <nav class="admin-nav">
+      <a href="/andrew">Andrew</a>
+      <a href="/daniel">Daniel</a>
+      <a href="/admin">Dashboard</a>
+      <a href="/status">Status</a>
+      <a href="/admin/history">History</a>
+      <a href="/admin/logs">Logs</a>
+      <a href="/admin/settings">Settings</a>
+      <a href="/admin/logout">Log out</a>
+    </nav>
+  </header>
+
+  <div class="set-hint">Fix this week's reading/outdoor entries. Camp auto-credit is shown but not editable.</div>
+
+  <div class="status-grid">
+    {% for k in kids %}
+      <section class="card">
+        <h2 class="status-name">{{ k.name }}</h2>
+
+        {% for kind in ['reading', 'outdoor'] %}
+          <div class="status-sub">{{ 'Reading' if kind == 'reading' else 'Outdoor' }}</div>
+          {% set entries = k.reading if kind == 'reading' else k.outdoor %}
+          {% if entries %}
+            {% for e in entries %}
+              {% if e.source == 'manual' %}
+                <form method="post" action="/admin/log/edit" class="row-form">
+                  {{ today_field() }}
+                  <input type="hidden" name="kind" value="{{ kind }}">
+                  <input type="hidden" name="log_id" value="{{ e.id }}">
+                  <span class="log-date">{{ e.log_date }}</span>
+                  <input type="number" name="minutes" value="{{ e.minutes }}" min="1" class="set-num">
+                  <button class="mini-btn">Save</button>
+                  <button class="mini-btn danger" formaction="/admin/log/delete"
+                          formmethod="post"
+                          onclick="return confirm('Delete this entry?');">Delete</button>
+                </form>
+              {% else %}
+                <div class="status-line status-muted">
+                  {{ e.log_date }}: {{ e.minutes }} min <span class="status-when">(camp auto)</span>
+                </div>
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            <div class="status-line status-muted">No entries this week.</div>
+          {% endif %}
+        {% endfor %}
+      </section>
+    {% endfor %}
+  </div>
+
+</div>
+</body>
+</html>
