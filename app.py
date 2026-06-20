@@ -472,10 +472,7 @@ def index():
     conn = get_db()
     if is_first_run(conn):
         return redirect("/setup")
-    kids = logic.active_kids(conn)
-    if kids:
-        return redirect("/" + kids[0]["url_slug"])
-    return redirect("/admin")
+    return redirect("/status")
 
 
 @app.route("/healthz")
