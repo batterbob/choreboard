@@ -1,5 +1,5 @@
 services:
-  summer-tracker:
+  family-tracker:
     build: .
     ports:
       - "7823:7823"
