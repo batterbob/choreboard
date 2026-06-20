@@ -23,6 +23,8 @@
   </header>
 
   {% if saved %}<div class="saved-banner">Saved ✓</div>{% endif %}
+  {% if notify_test == 'ok' %}<div class="saved-banner">Test notification sent ✓</div>{% endif %}
+  {% if notify_test == 'fail' %}<div class="saved-banner" style="background:#c0392b">Test notification failed — check your settings and server logs.</div>{% endif %}
 
   {# ---- App config ---- #}
   <h2 class="admin-section-h">App &amp; program</h2>
@@ -342,7 +344,13 @@
       <div style="margin-top:.75rem">
         <label><input type="checkbox" name="passphrase_required"{{ ' checked' if passphrase_required_val else '' }}>&nbsp;Lock kid pages — kids must enter their passphrase to view their page</label>
       </div>
-      <button class="mini-btn primary" type="submit" style="margin-top:.75rem">Save notifications</button>
+      <div style="margin-top:.75rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <button class="mini-btn primary" type="submit">Save notifications</button>
+      </div>
+    </form>
+    <form method="post" action="/admin/settings/notify/test" style="margin-top:.5rem">
+      <button class="mini-btn" type="submit">Send test notification</button>
+      <span class="set-hint" style="margin-left:.5rem">Uses currently saved settings</span>
     </form>
   </section>
 

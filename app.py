@@ -388,6 +388,7 @@ def settings_view(conn):
         "notify_gotify_token": g("notify_gotify_token", ""),
         "notify_urls": g("notify_urls", ""),
         "passphrase_required_val": g("passphrase_required", "0") == "1",
+        "notify_test": request.args.get("notify_test"),
         "specials": [dict(r) for r in logic.special_periods(conn)],
         "saved": request.args.get("saved"),
         "pwerror": request.args.get("pwerror"),
@@ -877,6 +878,16 @@ def admin_settings_appconfig():
                       "1" if request.form.get("outdoor_enabled") else "0")
     conn.commit()
     return redirect("/admin/settings?saved=1")
+
+
+@app.route("/admin/settings/notify/test", methods=["POST"])
+@require_admin
+def admin_settings_notify_test():
+    conn = get_db()
+    app_name = logic.get_setting(conn, "app_name", "Family Tracker")
+    ok = notify.send(conn, "%s — Test" % app_name,
+                     "Test notification from %s. If you see this, notifications are working!" % app_name)
+    return redirect("/admin/settings?notify_test=%s" % ("ok" if ok else "fail"))
 
 
 @app.route("/admin/settings/notify", methods=["POST"])
