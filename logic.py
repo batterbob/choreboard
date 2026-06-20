@@ -88,8 +88,11 @@ def active_kids(conn):
 # Program window & special periods (v1.1 A)
 # --------------------------------------------------------------------------- #
 def program_window(conn):
-    return (s2d(get_setting(conn, "program_start_date", "2026-06-22")),
-            s2d(get_setting(conn, "program_end_date", "2026-08-30")))
+    start_s = get_setting(conn, "program_start_date", "")
+    end_s = get_setting(conn, "program_end_date", "")
+    start = s2d(start_s) if start_s else date.today()
+    end = s2d(end_s) if end_s else date(2099, 12, 31)
+    return start, end
 
 
 def in_program_window(conn, d):
