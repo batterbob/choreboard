@@ -13,7 +13,7 @@ def _build_urls(conn):
     g = lambda k: (logic.get_setting(conn, k, "") or "").strip()
     if service == "pushover":
         app, user = g("notify_pushover_app_token"), g("notify_pushover_user_key")
-        return ["pover://%s/%s" % (app, user)] if app and user else []
+        return ["pover://%s@%s" % (user, app)] if app and user else []
     if service == "telegram":
         token, chat = g("notify_telegram_token"), g("notify_telegram_chatid")
         return ["tgram://%s/%s" % (token, chat)] if token and chat else []

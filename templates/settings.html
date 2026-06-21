@@ -16,6 +16,7 @@
       <a href="/status">Status</a>
       <a href="/admin/history">History</a>
       <a href="/admin/logs">Logs</a>
+      <a href="/admin/applog">Server Log</a>
       <a href="/admin/settings">Settings</a>
       {% for k in nav_kids %}<a href="/{{ k.slug }}">{{ k.name }}</a>{% endfor %}
       <a href="/admin/logout">Log out</a>
@@ -47,12 +48,12 @@
       <div class="set-row">
         <fieldset style="border:none;padding:0;margin:0">
           <legend style="font-weight:600;margin-bottom:.4rem">Activities tracked</legend>
-          <label style="display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem">
+          <label style="display:flex;flex-direction:row;gap:.5rem;align-items:center;margin-bottom:.4rem">
             <input type="checkbox" name="reading_enabled"{{ ' checked' if reading_enabled_val else '' }}>
             Enable activity 1:
             <input type="text" name="reading_label" value="{{ reading_label_val }}" class="set-text" placeholder="Reading">
           </label>
-          <label style="display:flex;gap:.5rem;align-items:center">
+          <label style="display:flex;flex-direction:row;gap:.5rem;align-items:center">
             <input type="checkbox" name="outdoor_enabled"{{ ' checked' if outdoor_enabled_val else '' }}>
             Enable activity 2:
             <input type="text" name="outdoor_label" value="{{ outdoor_label_val }}" class="set-text" placeholder="Outdoor Time">
@@ -146,8 +147,12 @@
           </label>
           {% endif %}
         </div>
+      {% else %}
+        <p class="set-hint" style="margin-bottom:.75rem">Add kids above to configure their weekly targets.</p>
       {% endfor %}
+      {% if kids %}
       <button class="mini-btn primary" type="submit">Save targets</button>
+      {% endif %}
     </form>
   </section>
 

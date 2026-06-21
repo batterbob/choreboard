@@ -2,6 +2,7 @@
 
 Single-process (no gunicorn workers) so background scheduling fires once.
 """
+import collections
 import os
 import re
 import logging
@@ -17,6 +18,22 @@ import notify
 import scheduler
 
 logging.basicConfig(level=logging.INFO)
+
+# In-memory ring buffer — keeps the last 500 log records for /admin/applog.
+_LOG_BUFFER = collections.deque(maxlen=500)
+
+class _RingHandler(logging.Handler):
+    def emit(self, record):
+        _LOG_BUFFER.append({
+            "ts": self.formatTime(record, "%Y-%m-%d %H:%M:%S"),
+            "level": record.levelname,
+            "name": record.name,
+            "msg": self.format(record),
+        })
+
+_ring = _RingHandler()
+_ring.setFormatter(logging.Formatter("%(message)s"))
+logging.getLogger().addHandler(_ring)
 
 app = Flask(__name__)
 
@@ -1453,6 +1470,17 @@ def admin_import():
     finally:
         conn.execute("PRAGMA foreign_keys=ON")
     return redirect("/admin/settings?import_done=1")
+
+
+# ---- Server log viewer ----------------------------------------------------- #
+@app.route("/admin/applog")
+@require_admin
+def admin_applog():
+    conn = get_db()
+    app_name = logic.get_setting(conn, "app_name", "ChoreBoard")
+    entries = list(_LOG_BUFFER)   # oldest → newest; reverse for display
+    return render_template("applog.html", entries=entries, app_name=app_name,
+                           nav_kids=logic.active_kids(conn))
 
 
 # Populate kid paths for the no-store filter now that the DB is seeded.

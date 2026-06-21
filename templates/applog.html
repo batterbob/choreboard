@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }} — Server Log</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+  <style>
+    .log-wrap { font-family: monospace; font-size: 13px; }
+    .log-row { display: flex; gap: .75rem; padding: 3px 8px; border-bottom: 1px solid var(--line); }
+    .log-row:last-child { border-bottom: none; }
+    .log-ts { color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+    .log-name { color: var(--muted); white-space: nowrap; flex-shrink: 0; min-width: 10ch; }
+    .log-msg { word-break: break-all; }
+    .log-row.lv-WARNING { background: #fffbe6; }
+    .log-row.lv-ERROR, .log-row.lv-CRITICAL { background: #fdf0f0; color: #c0392b; }
+    .log-row.lv-ERROR .log-ts,
+    .log-row.lv-CRITICAL .log-ts,
+    .log-row.lv-ERROR .log-name,
+    .log-row.lv-CRITICAL .log-name { color: #c0392b; }
+    .log-controls { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; }
+    .log-empty { color: var(--muted); font-size: 14px; padding: .5rem 0; }
+  </style>
+</head>
+<body>
+<div class="page admin">
+
+  <header class="admin-bar">
+    <h1 class="admin-title">Server Log</h1>
+    <nav class="admin-nav">
+      <a href="/admin">Dashboard</a>
+      <a href="/status">Status</a>
+      <a href="/admin/history">History</a>
+      <a href="/admin/logs">Logs</a>
+      <a href="/admin/applog" class="active">Server Log</a>
+      <a href="/admin/settings">Settings</a>
+      {% for k in nav_kids %}<a href="/{{ k.slug }}">{{ k.name }}</a>{% endfor %}
+      <a href="/admin/logout">Log out</a>
+    </nav>
+  </header>
+
+  <section class="card" style="margin-top:1rem">
+    <div class="log-controls">
+      <span class="set-hint" style="margin:0">Last {{ entries|length }} entries (in-memory, up to 500). Clears on restart.</span>
+      <button class="mini-btn" onclick="location.reload()">Refresh</button>
+      <label style="display:flex;flex-direction:row;gap:.4rem;align-items:center;font-size:14px">
+        <input type="checkbox" id="auto-refresh" onchange="toggleAuto(this)"> Auto-refresh (5s)
+      </label>
+    </div>
+    <div class="log-wrap">
+      {% if entries %}
+        {% for e in entries|reverse %}
+          <div class="log-row lv-{{ e.level }}">
+            <span class="log-ts">{{ e.ts }}</span>
+            <span class="log-name">{{ e.name }}</span>
+            <span class="log-msg">{{ e.msg }}</span>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="log-empty">No log entries yet.</div>
+      {% endif %}
+    </div>
+  </section>
+
+</div>
+<script>
+var _autoTimer = null;
+function toggleAuto(cb) {
+  if (cb.checked) {
+    _autoTimer = setInterval(function() { location.reload(); }, 5000);
+  } else {
+    clearInterval(_autoTimer);
+  }
+}
+</script>
+</body>
+</html>
