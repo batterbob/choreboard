@@ -84,25 +84,54 @@
   }
 
   /* ---- confetti ---- */
+  var COLORS = ["#ff3366","#ff6600","#ffcc00","#33cc33","#3399ff","#cc33ff","#ff99cc"];
+  var GOLD   = ["#FFD700","#FFA500","#FF6347","#FFD700"];
+
   function fireConfetti(big) {
     if (typeof confetti === "undefined") { return; }
     if (big) {
-      // Full-screen celebration: center burst + two side cannons
-      confetti({ particleCount: 160, spread: 80, origin: { x: 0.5, y: 0.45 } });
+      // Wave 1 — massive center explosion
+      confetti({ particleCount: 250, spread: 100, startVelocity: 60,
+                 scalar: 1.5, ticks: 300, origin: { x: 0.5, y: 0.45 },
+                 colors: COLORS });
+      // Wave 2 — side cannons
       setTimeout(function () {
-        confetti({ particleCount: 120, spread: 110, angle: 60,
-                   origin: { x: 0, y: 0.65 } });
-      }, 250);
+        confetti({ particleCount: 200, spread: 130, angle: 65, startVelocity: 65,
+                   scalar: 1.3, origin: { x: 0, y: 0.75 }, colors: COLORS });
+        confetti({ particleCount: 200, spread: 130, angle: 115, startVelocity: 65,
+                   scalar: 1.3, origin: { x: 1, y: 0.75 }, colors: COLORS });
+      }, 300);
+      // Wave 3 — big gold stars from center
       setTimeout(function () {
-        confetti({ particleCount: 120, spread: 110, angle: 120,
-                   origin: { x: 1, y: 0.65 } });
-      }, 500);
+        confetti({ particleCount: 100, spread: 90, startVelocity: 50,
+                   scalar: 2.5, shapes: ["star"], ticks: 350,
+                   origin: { x: 0.5, y: 0.5 }, colors: GOLD });
+      }, 550);
+      // Wave 4 — rain from both corners
       setTimeout(function () {
-        confetti({ particleCount: 80, spread: 60, startVelocity: 45,
-                   origin: { x: 0.5, y: 0.3 } });
-      }, 800);
+        confetti({ particleCount: 180, spread: 160, startVelocity: 25,
+                   scalar: 1.2, ticks: 400, origin: { x: 0.2, y: -0.1 },
+                   colors: COLORS, gravity: 1.2 });
+        confetti({ particleCount: 180, spread: 160, startVelocity: 25,
+                   scalar: 1.2, ticks: 400, origin: { x: 0.8, y: -0.1 },
+                   colors: COLORS, gravity: 1.2 });
+      }, 750);
+      // Wave 5 — second cannon salvo
+      setTimeout(function () {
+        confetti({ particleCount: 150, spread: 120, angle: 70, startVelocity: 55,
+                   scalar: 1.4, origin: { x: 0, y: 0.6 }, colors: GOLD });
+        confetti({ particleCount: 150, spread: 120, angle: 110, startVelocity: 55,
+                   scalar: 1.4, origin: { x: 1, y: 0.6 }, colors: GOLD });
+      }, 1050);
+      // Wave 6 — final straight-down shower
+      setTimeout(function () {
+        confetti({ particleCount: 300, spread: 180, startVelocity: 15,
+                   scalar: 1.1, ticks: 500, origin: { x: 0.5, y: -0.05 },
+                   colors: COLORS, gravity: 0.9 });
+      }, 1350);
     } else {
-      confetti({ particleCount: 55, spread: 65, origin: { x: 0.5, y: 0.55 } });
+      confetti({ particleCount: 75, spread: 70, startVelocity: 45,
+                 scalar: 1.3, origin: { x: 0.5, y: 0.55 }, colors: COLORS });
     }
   }
 
@@ -140,7 +169,7 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         if (!data) { return; }
-        if (kind === "daily" && data.checklist_done) {
+        if (data.checklist_done) {
           var list = $("#checklist"), cel = $("#celebration");
           if (list) { list.hidden = true; }
           if (cel) { cel.hidden = false; }
