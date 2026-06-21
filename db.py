@@ -223,7 +223,7 @@ def init_db(conn, env=None):
     else:
         _migrate_daily_assignments(conn)   # existing DB: preserve daily-for-both
         # Non-destructive settings migration for existing DBs.
-        _ensure_setting(conn, "app_name", env.get("APP_NAME", "Family Tracker"))
+        _ensure_setting(conn, "app_name", env.get("APP_NAME", "ChoreBoard"))
         _ensure_setting(conn, "program_label", env.get("PROGRAM_LABEL", "Activity Tracker"))
         _ensure_setting(conn, "reading_label", "Reading")
         _ensure_setting(conn, "reading_enabled", "1")
@@ -276,7 +276,7 @@ def _seed(conn, env):
     from datetime import date
     today = date.today().isoformat()
     settings = {
-        "app_name": env.get("APP_NAME", "Family Tracker"),
+        "app_name": env.get("APP_NAME", "ChoreBoard"),
         "program_label": env.get("PROGRAM_LABEL", "Activity Tracker"),
         "reading_label": "Reading",
         "reading_enabled": "1",
@@ -365,3 +365,4 @@ def seed_test_data(conn, env=None):
     conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES "
                  "('daily_assignment_migrated', '1')")
     conn.commit()
+

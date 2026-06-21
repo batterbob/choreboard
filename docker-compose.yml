@@ -1,5 +1,5 @@
 services:
-  family-tracker:
+  choreboard:
     build: .
     ports:
       - "7823:7823"

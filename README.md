@@ -1,4 +1,4 @@
-# Family Tracker
+# ChoreBoard
 
 A self-hosted web app for keeping kids on track during a structured program — summer, school year, whatever you're running. Kids check off daily chores and log reading and outdoor time on their own. Parents get a read-only status page and a password-protected admin dashboard.
 
@@ -79,8 +79,8 @@ CHORE_DEBUG=0
 ## Deploy on Docker
 
 ```bash
-git clone https://github.com/batterbob/family-tracker.git
-cd family-tracker
+git clone https://github.com/batterbob/choreboard.git
+cd choreboard
 cp .env.example .env   # edit with your values
 docker compose up -d --build
 ```

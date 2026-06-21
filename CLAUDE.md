@@ -1,4 +1,4 @@
-# Family Tracker — Project Memory
+# ChoreBoard — Project Memory
 
 A self-hosted family web app for tracking kids' daily chores and activity goals (reading, outdoor time) during a structured program. Kids check off chores and log time on their own; parents get a read-only status page and a password-protected admin dashboard. Notifications via Apprise (Pushover, Telegram, Discord, Slack, ntfy, Gotify, or any Apprise URL).
 

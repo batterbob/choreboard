@@ -1,4 +1,4 @@
-"""Family Tracker — Flask entrypoint.
+"""ChoreBoard — Flask entrypoint.
 
 Single-process (no gunicorn workers) so background scheduling fires once.
 """
@@ -96,7 +96,7 @@ def inject_globals():
     conn = get_db()
     g_set = lambda key, default: logic.get_setting(conn, key, default)
     return {
-        "app_name": g_set("app_name", "Family Tracker"),
+        "app_name": g_set("app_name", "ChoreBoard"),
         "program_label": g_set("program_label", "Activity Tracker"),
         "reading_label": g_set("reading_label", "Reading"),
         "reading_enabled": g_set("reading_enabled", "1") != "0",
@@ -404,7 +404,7 @@ def settings_view(conn):
     return {
         "kids": kids,
         "all_kids": [dict(k) for k in all_kids],
-        "app_name_val": g("app_name", "Family Tracker"),
+        "app_name_val": g("app_name", "ChoreBoard"),
         "program_label_val": g("program_label", "Activity Tracker"),
         "reading_label_val": g("reading_label", "Reading"),
         "reading_enabled_val": g("reading_enabled", "1") != "0",
@@ -953,7 +953,7 @@ def admin_settings_appconfig():
 @require_admin
 def admin_settings_notify_test():
     conn = get_db()
-    app_name = logic.get_setting(conn, "app_name", "Family Tracker")
+    app_name = logic.get_setting(conn, "app_name", "ChoreBoard")
     ok = notify.send(conn, "%s — Test" % app_name,
                      "Test notification from %s. If you see this, notifications are working!" % app_name)
     return redirect("/admin/settings?notify_test=%s" % ("ok" if ok else "fail"))
@@ -1152,7 +1152,7 @@ def _maybe_reinstate_bonus(conn, kid, d):
     """After any kid action on Monday, see if the make-up bonus is now earned."""
     row = logic.check_makeup_reinstatement(conn, kid["id"], d)
     if row is not None:
-        app_name = logic.get_setting(conn, "app_name", "Family Tracker")
+        app_name = logic.get_setting(conn, "app_name", "ChoreBoard")
         notify.send(conn, app_name,
                     "%s earned their bonus back!" % kid["name"])
         return True
@@ -1179,7 +1179,7 @@ def api_chore_complete():
             conn.execute("UPDATE as_needed_assignments SET completed_at=? WHERE id=?",
                          (logic.now_iso(), row["id"]))
             conn.commit()
-            app_name = logic.get_setting(conn, "app_name", "Family Tracker")
+            app_name = logic.get_setting(conn, "app_name", "ChoreBoard")
             notify.send(conn, app_name,
                         "%s completed: %s" % (kid["name"], row["name"]))
         return jsonify({"ok": True})
@@ -1203,7 +1203,7 @@ def api_chore_complete():
     if ctype in ("daily", "alternate_daily"):
         done, _ = logic.checklist_status(conn, kid["id"], d)
         if done:
-            app_name = logic.get_setting(conn, "app_name", "Family Tracker")
+            app_name = logic.get_setting(conn, "app_name", "ChoreBoard")
             notify.send_once(conn, kid["id"], "daily_complete", "%s ✓" % app_name,
                              "%s finished their daily checklist!" % kid["name"], d)
     reinstated = _maybe_reinstate_bonus(conn, kid, d)
@@ -1355,7 +1355,7 @@ def setup_wizard():
     if not is_first_run(conn):
         return redirect("/admin")
     if request.method == "POST":
-        app_name = (request.form.get("app_name") or "Family Tracker").strip()
+        app_name = (request.form.get("app_name") or "ChoreBoard").strip()
         tz = (request.form.get("timezone") or "America/New_York").strip()
         password = (request.form.get("password") or "").strip()
         logic.set_setting(conn, "app_name", app_name)
@@ -1408,7 +1408,7 @@ def admin_export():
     from flask import Response
     payload = _json.dumps(data, indent=2, default=str)
     return Response(payload, mimetype="application/json",
-                    headers={"Content-Disposition": "attachment; filename=family_tracker_export.json"})
+                    headers={"Content-Disposition": "attachment; filename=choreboard_export.json"})
 
 
 # Populate kid paths for the no-store filter now that the DB is seeded.
@@ -1423,3 +1423,4 @@ if __name__ == "__main__":
     # handles the two-iPads-at-once case.
     scheduler.start(os.environ)
     app.run(host="0.0.0.0", port=port, threaded=True, use_reloader=False)
+

@@ -62,7 +62,7 @@ def maybe_morning_reminder(conn, now, d):
     t = _parse_hhmm(rt)
     if t is None or now.time() < t:
         return
-    app_name = logic.get_setting(conn, "app_name", "Family Tracker")
+    app_name = logic.get_setting(conn, "app_name", "ChoreBoard")
     for kid in logic.active_kids(conn):
         if not logic.assigned_daily_chores(conn, kid["id"], d):
             continue                            # this kid has no daily chores -> skip
@@ -79,7 +79,7 @@ def maybe_sunday_summary(conn, now, d):
         return
     if logic.is_paused(conn, d):                # paused week -> no summary
         return
-    app_name = logic.get_setting(conn, "app_name", "Family Tracker")
+    app_name = logic.get_setting(conn, "app_name", "ChoreBoard")
     notify.send_once(conn, HOUSEHOLD, "weekly_summary", "%s — Week Summary" % app_name,
                      build_summary(conn, d), d)
 
@@ -91,7 +91,7 @@ def maybe_monday_recap(conn, now, d):
     if logic.is_paused(conn, d):
         return
     last_sunday = d - timedelta(days=1)
-    app_name = logic.get_setting(conn, "app_name", "Family Tracker")
+    app_name = logic.get_setting(conn, "app_name", "ChoreBoard")
     notify.send_once(conn, HOUSEHOLD, "monday_recap",
                      "%s — Last Week" % app_name,
                      build_summary(conn, last_sunday), d)
@@ -102,7 +102,7 @@ def maybe_scheduled_due(conn, now, d):
     if now.hour < 17:                            # give them the day; nudge in the evening
         return
     ws = logic.week_start(d)
-    app_name = logic.get_setting(conn, "app_name", "Family Tracker")
+    app_name = logic.get_setting(conn, "app_name", "ChoreBoard")
     for ch in conn.execute(
             "SELECT * FROM chores WHERE type='scheduled' AND active=1").fetchall():
         if ch["due_weekday"] != d.weekday():
@@ -180,3 +180,4 @@ def start(env=None):
     sched.start()
     log.info("Scheduler started (minute interval).")
     return sched
+
