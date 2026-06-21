@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }} — History</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<div class="page admin">
+
+  <header class="admin-bar">
+    <h1 class="admin-title">History</h1>
+    <nav class="admin-nav">
+      <a href="/admin">Dashboard</a>
+      <a href="/status">Status</a>
+      <a href="/admin/history">History</a>
+      <a href="/admin/logs">Activity Logs</a>
+      <a href="/admin/applog">Server Log</a>
+      <a href="/admin/settings">Settings</a>
+      {% for k in nav_kids %}<a href="/{{ k.slug }}">{{ k.name }}</a>{% endfor %}
+      <a href="/admin/logout">Log out</a>
+    </nav>
+  </header>
+
+  {# ---- Summary strip ---- #}
+  <div class="status-grid">
+    {% for s in summary %}
+      <section class="card status-card">
+        <h2 class="status-name">{{ s.name }}</h2>
+        <div class="status-line">Bonus earned <strong>{{ s.stars }} of {{ s.total }}</strong> weeks</div>
+        {% if s.streak > 0 %}
+          <div class="status-line status-good">{{ s.streak }}-week streak ✓</div>
+        {% else %}
+          <div class="status-line status-muted">No active streak</div>
+        {% endif %}
+      </section>
+    {% endfor %}
+  </div>
+
+  {# ---- Week-by-week ---- #}
+  <h2 class="admin-section-h">Completed weeks</h2>
+  {% if not weeks %}
+    <section class="card"><div class="status-line status-muted">No completed weeks yet.</div></section>
+  {% endif %}
+
+  {% for w in weeks %}
+    <details class="card week-row">
+      <summary class="week-summary">
+        <span class="week-label">{{ w.label }}</span>
+        <span class="week-badges">
+          {% for k in w.kids %}
+            {% if k.paused %}
+              <span class="wbadge wbadge-break">{{ k.name }}: break</span>
+            {% elif k.bonus %}
+              <span class="wbadge wbadge-good">{{ k.name }}: bonus ✓</span>
+            {% else %}
+              <span class="wbadge wbadge-bad">{{ k.name }}: no bonus ✗</span>
+            {% endif %}
+          {% endfor %}
+        </span>
+      </summary>
+
+      {% if w.prorated %}
+        <div class="proration-note">Some kids' targets were prorated this week (fewer than 7 active days).</div>
+      {% endif %}
+
+      <div class="status-grid">
+        {% for k in w.kids %}
+          <div class="week-kid">
+            <h3 class="week-kid-name">{{ k.name }}</h3>
+            {% if k.paused %}
+              <div class="status-line status-break">On break — week didn't count</div>
+            {% else %}
+              <div class="status-line">Checklist: <strong>{{ k.checklist_days }}/{{ k.checklist_active }} days</strong></div>
+              {% for a in k.activities %}<div class="status-line">{{ a.label }}: {{ a.weekly_disp }}/{{ a.target_disp }}
+                {{ '✓' if a.met else '✗' }}</div>{% endfor %}
+              <div class="status-line {{ 'status-good' if k.bonus else 'status-bad' }}">
+                Bonus: {{ 'earned ✓' if k.bonus else 'not earned ✗' }}</div>
+              {% if k.breakdown %}
+                <div class="status-sub">Daily chores (days done):</div>
+                {% for b in k.breakdown %}
+                  <div class="status-line breakdown-line">{{ b.name }} — {{ b.count }}</div>
+                {% endfor %}
+              {% endif %}
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </details>
+  {% endfor %}
+
+
+</div>
+</body>
+</html>

@@ -1,0 +1,71 @@
+{% macro today_field() %}{% if debug_today %}<input type="hidden" name="today" value="{{ debug_today }}">{% endif %}{% endmacro %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }} — Edit Activity Logs</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<div class="page admin">
+
+  <header class="admin-bar">
+    <div>
+      <h1 class="admin-title">Edit Activity Logs</h1>
+      <div class="today-date">Week of {{ week_label }}</div>
+    </div>
+    <nav class="admin-nav">
+      <a href="/admin">Dashboard</a>
+      <a href="/status">Status</a>
+      <a href="/admin/history">History</a>
+      <a href="/admin/logs">Activity Logs</a>
+      <a href="/admin/applog">Server Log</a>
+      <a href="/admin/settings">Settings</a>
+      {% for k in nav_kids %}<a href="/{{ k.slug }}">{{ k.name }}</a>{% endfor %}
+      <a href="/admin/logout">Log out</a>
+    </nav>
+  </header>
+
+  <div class="set-hint">Use this page to correct a kid's activity entries for the current week — for example, if they logged the wrong number of minutes or you need to remove a duplicate entry. Only manual entries (logged by the kid) can be edited or deleted. Entries added automatically by the system (vacation credits) are shown for reference but cannot be changed here.</div>
+
+  <div class="status-grid">
+    {% for k in kids %}
+      <section class="card">
+        <h2 class="status-name">{{ k.name }}</h2>
+
+        {% for sec in k.sections %}
+          {% set unit_label = 'min' if sec.unit == 'minutes' else '' %}
+          <div class="status-sub">{{ sec.label }}</div>
+          {% if sec.entries %}
+            {% for e in sec.entries %}
+              {% if e.source == 'manual' %}
+                <form method="post" action="/admin/log/edit" class="row-form">
+                  {{ today_field() }}
+                  <input type="hidden" name="kind" value="{{ sec.key }}">
+                  <input type="hidden" name="log_id" value="{{ e.id }}">
+                  <span class="log-date">{{ e.log_date }}</span>
+                  <input type="number" name="minutes" value="{{ e.amount }}" min="1" class="set-num">
+                  <button class="mini-btn">Save</button>
+                  <button class="mini-btn danger" formaction="/admin/log/delete"
+                          formmethod="post"
+                          onclick="return confirm('Delete this entry?');">Delete</button>
+                </form>
+              {% else %}
+                <div class="status-line status-muted">
+                  {{ e.log_date }}: {{ e.amount }}{% if unit_label %} {{ unit_label }}{% endif %} <span class="status-when">(auto credit)</span>
+                </div>
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            <div class="status-line status-muted">No entries this week.</div>
+          {% endif %}
+        {% endfor %}
+      </section>
+    {% endfor %}
+  </div>
+
+
+</div>
+</body>
+</html>

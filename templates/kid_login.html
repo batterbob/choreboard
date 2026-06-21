@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>{{ kid.name }} — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<div class="page">
+  <header class="topbar">
+    <h1 class="kid-name">{{ kid.name }}</h1>
+    <div class="today-date">Sign in</div>
+  </header>
+
+  <section class="card login-card">
+    {% if error %}<div class="login-error">{{ error }}</div>{% endif %}
+    <form method="post" action="/login/{{ kid.url_slug }}">
+      <label class="login-label" for="passphrase">Passphrase</label>
+      <input class="login-input" type="password" id="passphrase" name="passphrase"
+             autocomplete="current-password" autofocus>
+      <button class="login-btn" type="submit">Sign in</button>
+    </form>
+  </section>
+  <div class="site-footer"><a href="https://github.com/batterbob/Choreify" target="_blank" rel="noopener">Choreify on GitHub</a></div>
+</div>
+</body>
+</html>

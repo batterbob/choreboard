@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# App data (SQLite + backups) — do not commit
+data/
+
+# Env / secrets
+.env
+*.env
+
+# Dev server output files
+app_out.txt
+app_err.txt
+
+# Personal development docs
+2026-*
+CLAUDE.md
+docs/screenshots/test_screen.png
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome — Setup</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<div class="page admin">
+
+  <header class="admin-bar">
+    <h1 class="admin-title">Welcome — First-Run Setup</h1>
+  </header>
+
+  <section class="card">
+    <p style="margin-bottom:1rem">Let's get {{ app_name }} configured. You can change all of these settings later from the admin Settings page.</p>
+    <form method="post" action="/setup">
+
+      <h3 style="margin-bottom:.5rem">App identity</h3>
+      <div class="set-row">
+        <label>App name <span class="set-hint">(shown in browser tabs &amp; notifications)</span>
+          <input type="text" name="app_name" value="Choreify" class="set-text wide" required>
+        </label>
+      </div>
+      <div class="set-row">
+        <label>Program label <span class="set-hint">(the activity period name, e.g. "Summer Camp" or "School Year" — used in notifications)</span>
+          <input type="text" name="program_label" value="Activity Tracker" class="set-text wide">
+        </label>
+      </div>
+
+      <h3 style="margin-top:1.25rem;margin-bottom:.5rem">Timezone</h3>
+      <div class="set-row">
+        <label>Timezone
+          <select name="timezone" class="add-type">
+            {% for tz in common_tz %}
+              <option value="{{ tz }}"{{ ' selected' if tz == 'America/New_York' else '' }}>{{ tz }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <span class="set-hint">Not listed? Enter it in Settings → App &amp; program after setup.</span>
+      </div>
+
+      <h3 style="margin-top:1.25rem;margin-bottom:.5rem">Admin password</h3>
+      <div class="set-row">
+        <label>Password <span class="set-hint">(leave blank to keep the password from your .env / ADMIN_PASSWORD)</span>
+          <input type="password" name="password" class="set-text" autocomplete="new-password">
+        </label>
+        <span class="set-hint">Set a real password here if you haven't configured one in your environment — don't leave the default in place.</span>
+      </div>
+
+      <h3 style="margin-top:1.25rem;margin-bottom:.5rem">Activities &amp; reward</h3>
+      <div class="set-hint" style="margin-bottom:.75rem">Kids can log up to two timed activities (e.g. reading, outdoor time). Turn off both for a chores-only setup — the weekly bonus is then earned by finishing the daily checklist. You can fine-tune targets later in Settings.</div>
+      <div class="set-row">
+        <label style="display:flex;flex-direction:row;gap:.5rem;align-items:center;margin-bottom:.4rem">
+          <input type="checkbox" name="reading_enabled" checked>
+          Activity 1:
+          <input type="text" name="reading_label" value="Reading" class="set-text" placeholder="Reading">
+        </label>
+      </div>
+      <div class="set-row">
+        <label style="display:flex;flex-direction:row;gap:.5rem;align-items:center">
+          <input type="checkbox" name="outdoor_enabled" checked>
+          Activity 2:
+          <input type="text" name="outdoor_label" value="Outdoor Time" class="set-text" placeholder="Outdoor Time">
+        </label>
+      </div>
+      <div class="set-row">
+        <label>Reward for a bonus week <span class="set-hint">(shown on kid pages; blank to hide)</span>
+          <input type="text" name="reward" class="set-text wide" placeholder="e.g. 30 min extra screen time">
+        </label>
+      </div>
+
+      <h3 style="margin-top:1.25rem;margin-bottom:.5rem">Kids (add up to 4)</h3>
+      <div class="set-hint" style="margin-bottom:.75rem">The URL slug becomes their page address — e.g. slug "alex" → /alex. Lowercase, no spaces.</div>
+      {% for i in [1, 2, 3, 4] %}
+        <div class="set-row">
+          <label>Kid {{ i }} name
+            <input type="text" name="kid{{ i }}_name" id="kid{{ i }}-name" class="add-name"
+                   placeholder="e.g. Alex{% if i == 2 %}, Jordan{% endif %}"
+                   oninput="autoSlug(this,'kid{{ i }}-slug')">
+          </label>
+          <label>URL slug
+            <input type="text" name="kid{{ i }}_slug" id="kid{{ i }}-slug" class="set-text"
+                   placeholder="auto-filled" pattern="[a-z0-9_-]*">
+          </label>
+        </div>
+      {% endfor %}
+      <div class="set-hint" style="margin-bottom:1rem">At least one kid is required. You can add more from Settings later.</div>
+
+      <button class="mini-btn primary" type="submit" style="font-size:1rem;padding:.6rem 1.5rem">
+        Finish setup &amp; go to dashboard →
+      </button>
+    </form>
+  </section>
+
+  <div class="site-footer"><a href="https://github.com/batterbob/Choreify" target="_blank" rel="noopener">Choreify on GitHub</a></div>
+</div>
+<script>
+function autoSlug(nameInput, slugId) {
+  var slugEl = document.getElementById(slugId);
+  if (!slugEl || slugEl.dataset.userEdited) { return; }
+  slugEl.value = nameInput.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+}
+document.addEventListener('DOMContentLoaded', function() {
+  [1,2,3,4].forEach(function(i) {
+    var el = document.getElementById('kid' + i + '-slug');
+    if (el) { el.addEventListener('input', function() { el.dataset.userEdited = '1'; }); }
+  });
+});
+</script>
+</body>
+</html>

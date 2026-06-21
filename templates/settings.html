@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }} — Settings</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<div class="page admin">
+
+  <header class="admin-bar">
+    <h1 class="admin-title">Settings</h1>
+    <nav class="admin-nav">
+      <a href="/admin">Dashboard</a>
+      <a href="/status">Status</a>
+      <a href="/admin/history">History</a>
+      <a href="/admin/logs">Activity Logs</a>
+      <a href="/admin/applog">Server Log</a>
+      <a href="/admin/settings">Settings</a>
+      {% for k in nav_kids %}<a href="/{{ k.slug }}">{{ k.name }}</a>{% endfor %}
+      <a href="/admin/logout">Log out</a>
+    </nav>
+  </header>
+
+  {% if saved %}<div class="saved-banner">Saved ✓</div>{% endif %}
+  {% if notify_test == 'ok' %}<div class="saved-banner">Test notification sent ✓</div>{% endif %}
+  {% if notify_test == 'fail' %}<div class="saved-banner" style="background:#c0392b">Test notification failed — check your settings and server logs.</div>{% endif %}
+
+  {# ---- App config ---- #}
+  <h2 class="admin-section-h">App &amp; program</h2>
+  <section class="card">
+    <form method="post" action="/admin/settings/appconfig">
+      <div class="set-row">
+        <label>App name
+          <input type="text" name="app_name" value="{{ app_name_val }}" class="set-text wide" required>
+        </label>
+        <label>Program label (shown as section heading)
+          <input type="text" name="program_label" value="{{ program_label_val }}" class="set-text wide">
+        </label>
+      </div>
+      <div class="set-row">
+        <label>Timezone
+          <input type="text" name="timezone" value="{{ timezone_val }}" class="set-text" placeholder="America/New_York">
+        </label>
+        <span class="set-hint">Use <a href="https://en.wikipedia.org/wiki/List_of_tz_database_time_zones" target="_blank" rel="noopener">tz database name</a> (e.g. America/Chicago, Europe/London)</span>
+      </div>
+      <button class="mini-btn primary" type="submit">Save app settings</button>
+    </form>
+  </section>
+
+  {# ---- Activities ---- #}
+  <h2 class="admin-section-h">Activities</h2>
+  <section class="card">
+    <table class="chore-table">
+      <tr><th>Label</th><th>Unit</th><th>Default target</th><th>On</th><th>Edit</th><th></th></tr>
+      {% for a in activities %}
+        <tr>
+          <td>{{ a.label }}</td>
+          <td>{{ 'minutes' if a.unit == 'minutes' else 'count' }}</td>
+          <td>{{ a.default_target }}</td>
+          <td>{{ 'Yes' if a.enabled else 'No' }}</td>
+          <td><button class="mini-btn" type="button" onclick="toggleEdit('act-{{ a.id }}')">Edit</button></td>
+          <td>
+            <form method="post" action="/admin/settings/activity/delete" class="inline-form"
+                  onsubmit="return confirm('Delete {{ a.label }} and all its logs? This cannot be undone.');">
+              <input type="hidden" name="activity_id" value="{{ a.id }}">
+              <button class="mini-btn danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+        <tr id="act-{{ a.id }}" class="edit-row" hidden>
+          <td colspan="6">
+            <form method="post" action="/admin/settings/activity/update" class="add-form">
+              <input type="hidden" name="activity_id" value="{{ a.id }}">
+              <input type="text" name="label" value="{{ a.label }}" class="add-name" required>
+              <select name="unit" class="add-type">
+                <option value="minutes"{{ ' selected' if a.unit == 'minutes' else '' }}>minutes</option>
+                <option value="count"{{ ' selected' if a.unit == 'count' else '' }}>count</option>
+              </select>
+              <label class="set-hint" style="margin:0 .25rem">Default target
+                <input type="number" name="default_target" value="{{ a.default_target }}" min="0" class="set-num"></label>
+              <label style="display:flex;flex-direction:row;gap:.4rem;align-items:center">
+                <input type="checkbox" name="enabled"{{ ' checked' if a.enabled else '' }}> Enabled</label>
+              <button class="mini-btn primary" type="submit">Save</button>
+              <button class="mini-btn" type="button" onclick="toggleEdit('act-{{ a.id }}')">Cancel</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+    <form method="post" action="/admin/settings/activity/add" class="add-form">
+      <input type="text" name="label" placeholder="New activity name" class="add-name" required>
+      <select name="unit" class="add-type">
+        <option value="minutes">minutes</option>
+        <option value="count">count</option>
+      </select>
+      <label class="set-hint" style="margin:0 .25rem">Default target
+        <input type="number" name="default_target" value="0" min="0" class="set-num"></label>
+      <button class="mini-btn primary" type="submit">Add activity</button>
+    </form>
+    <div class="set-hint" style="margin-top:.75rem">Activities are the timed or counted things kids log (reading, outdoor time, glasses of water…). Disable all of them for a chores-only setup. The weekly bonus needs every <em>enabled</em> activity's target met.</div>
+  </section>
+
+  {# ---- Kid management ---- #}
+  <h2 class="admin-section-h">Kids</h2>
+  <section class="card">
+    <table class="chore-table">
+      <tr><th>Name</th><th>URL slug</th><th>Active</th><th>Passphrase</th><th></th></tr>
+      {% for k in all_kids %}
+        <tr>
+          <td>{{ k.name }}</td>
+          <td>/{{ k.url_slug }}</td>
+          <td>{{ "Yes" if k.active else "No" }}</td>
+          <td>{{ "Set" if k.passphrase_hash else "None" }}</td>
+          <td style="display:flex;gap:.4rem;flex-wrap:wrap">
+            <button class="mini-btn" type="button" onclick="toggleEdit('kid-{{ k.id }}')">Edit</button>
+            <button class="mini-btn" type="button" onclick="toggleEdit('pw-{{ k.id }}')">Passphrase</button>
+            {% if k.active %}
+              <form method="post" action="/admin/kid/deactivate" class="inline-form">
+                <input type="hidden" name="kid_id" value="{{ k.id }}">
+                <button class="mini-btn danger" onclick="return confirm('Deactivate {{ k.name }}?')">Deactivate</button>
+              </form>
+            {% else %}
+              <form method="post" action="/admin/kid/activate" class="inline-form">
+                <input type="hidden" name="kid_id" value="{{ k.id }}">
+                <button class="mini-btn">Activate</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+        <tr id="kid-{{ k.id }}" class="edit-row" hidden>
+          <td colspan="5">
+            <form method="post" action="/admin/kid/rename" class="add-form">
+              <input type="hidden" name="kid_id" value="{{ k.id }}">
+              <label class="set-hint" style="margin-right:.25rem">Name</label>
+              <input type="text" name="name" value="{{ k.name }}" class="add-name" required>
+              <label class="set-hint" style="margin:0 .25rem 0 .5rem">URL slug</label>
+              <input type="text" name="slug" value="{{ k.url_slug }}" class="set-text" pattern="[a-z0-9_-]+" required>
+              <button class="mini-btn primary" type="submit">Save</button>
+              <button class="mini-btn" type="button" onclick="toggleEdit('kid-{{ k.id }}')">Cancel</button>
+            </form>
+          </td>
+        </tr>
+        <tr id="pw-{{ k.id }}" class="edit-row" hidden>
+          <td colspan="5">
+            <form method="post" action="/admin/kid/passphrase" class="add-form">
+              <input type="hidden" name="kid_id" value="{{ k.id }}">
+              <input type="text" name="passphrase" class="set-text wide" placeholder="New passphrase (blank to remove)">
+              <button class="mini-btn primary" type="submit">Set passphrase</button>
+              <button class="mini-btn" type="button" onclick="toggleEdit('pw-{{ k.id }}')">Cancel</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+    <div style="margin-top:1rem">
+      <strong>Add kid</strong>
+      <form method="post" action="/admin/kid/add" class="add-form" style="margin-top:.4rem">
+        <input type="text" name="name" id="new-kid-name" placeholder="Name" class="add-name" required
+               oninput="autoSlug(this,'new-kid-slug')">
+        <input type="text" name="slug" id="new-kid-slug" placeholder="url-slug (auto)" class="set-text"
+               pattern="[a-z0-9_-]+" required>
+        <button class="mini-btn primary" type="submit">Add kid</button>
+      </form>
+    </div>
+    <div class="set-hint">URL slug must be lowercase letters, numbers, hyphens, underscores.</div>
+  </section>
+
+  {# ---- Per-kid targets ---- #}
+  <h2 class="admin-section-h">Weekly targets</h2>
+  <section class="card">
+    <form method="post" action="/admin/settings/targets">
+      {% set enabled_activities = activities | selectattr('enabled') | list %}
+      {% for k in kids %}
+        <div class="set-row">
+          <span class="set-name">{{ k.name }}</span>
+          {% for a in enabled_activities %}
+          <label>{{ a.label }}{% if a.unit == 'minutes' %} (min){% endif %}
+            <input type="number" name="target_{{ a.id }}_{{ k.id }}" value="{{ k.targets[a.id] }}" min="1" class="set-num">
+          </label>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="set-hint" style="margin-bottom:.75rem">Add kids above to configure their weekly targets.</p>
+      {% endfor %}
+      {% if kids and enabled_activities %}
+      <button class="mini-btn primary" type="submit">Save targets</button>
+      {% elif kids %}
+      <p class="set-hint">No activities enabled — this is a chores-only setup.</p>
+      {% endif %}
+    </form>
+  </section>
+
+  {# ---- Goals & schedule ---- #}
+  <h2 class="admin-section-h">Schedule &amp; reward</h2>
+  <section class="card">
+    <form method="post" action="/admin/settings/general">
+      <div class="set-row">
+        <label>Reminder time (HH:MM or "off")
+          <input type="text" name="reminder_time" value="{{ reminder_time }}" class="set-text">
+        </label>
+      </div>
+      <div class="set-row">
+        <label>Program start (YYYY-MM-DD)
+          <input type="text" name="program_start" value="{{ program_start }}" class="set-text">
+        </label>
+        <label>Program end (YYYY-MM-DD, blank for ongoing)
+          <input type="text" name="program_end" value="{{ program_end }}" class="set-text">
+        </label>
+      </div>
+      <div class="set-row">
+        <label>Scoreboard reward (shown on kid pages; blank to hide)
+          <input type="text" name="reward" value="{{ reward }}" class="set-text wide">
+        </label>
+      </div>
+      <div class="set-row">
+        <label>Bonus allowance per star ($ per week, blank to disable)
+          <input type="number" name="bonus_dollar_amount" value="{{ bonus_dollar_amount }}"
+                 min="0" step="0.50" class="set-num" placeholder="e.g. 5">
+        </label>
+        <span class="set-hint">When set, the kid's page shows a running total of allowance earned from bonus weeks.</span>
+      </div>
+      {% if not any_activities_enabled %}
+      <div class="set-row">
+        <label>Checklist days needed for the weekly bonus (blank = every day)
+          <input type="number" name="checklist_min_days" value="{{ checklist_min_days }}"
+                 min="1" max="7" class="set-num" placeholder="every day">
+        </label>
+        <span class="set-hint">Chores-only mode: with no activities enabled, the bonus is earned by finishing the daily checklist on this many days each week.</span>
+      </div>
+      {% endif %}
+      <div class="set-row">
+        <label style="display:flex;flex-direction:row;gap:.5rem;align-items:center">
+          <input type="checkbox" name="points_enabled"{{ ' checked' if points_enabled_val else '' }}>
+          Reward chores with points
+        </label>
+        <span class="set-hint">Give each chore a point value (set per chore on the dashboard). Kids see points earned this week.</span>
+      </div>
+      <div class="set-row">
+        <label>Dollars per point (blank to show points only)
+          <input type="number" name="dollars_per_point" value="{{ dollars_per_point }}"
+                 min="0" step="0.05" class="set-num" placeholder="e.g. 0.25">
+        </label>
+        <span class="set-hint">When set, the kid's page also shows this week's points as a dollar amount.</span>
+      </div>
+      <button class="mini-btn primary" type="submit">Save</button>
+    </form>
+  </section>
+
+  {# ---- Special periods ---- #}
+  <h2 class="admin-section-h">Vacations &amp; exceptions</h2>
+  <section class="card">
+    <table class="chore-table">
+      <tr><th>Label</th><th>Type</th><th>Start</th><th>End</th><th>Credit/day</th><th>Paused items</th><th></th><th></th></tr>
+      {% for sp in specials %}
+        <tr>
+          <td>{{ sp.label }}</td>
+          <td>{{ 'Paused' if sp.type == 'paused' else 'Activity credit' }}</td>
+          <td>{{ sp.start_date }}</td>
+          <td>{{ sp.end_date }}</td>
+          <td>{{ sp.outdoor_minutes_per_day if sp.outdoor_minutes_per_day is not none else '—' }}</td>
+          <td class="set-hint">
+            {%- set n = sp.paused_chore_ids|length + sp.paused_activity_ids|length -%}
+            {{ n ~ ' item' ~ ('s' if n != 1 else '') if n else '—' }}
+          </td>
+          <td><button class="mini-btn" type="button" onclick="toggleEdit({{ sp.id }})">Edit</button></td>
+          <td>
+            <form method="post" action="/admin/special/delete" class="inline-form"
+                  onsubmit="return confirm('Delete this period?');">
+              <input type="hidden" name="id" value="{{ sp.id }}">
+              <button class="mini-btn danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+        <tr id="edit-{{ sp.id }}" class="edit-row" hidden>
+          <td colspan="8">
+            <form method="post" action="/admin/special/edit" class="add-form" style="flex-wrap:wrap">
+              <input type="hidden" name="id" value="{{ sp.id }}">
+              <input type="text" name="label" value="{{ sp.label }}" class="add-name" required>
+              <select name="type" class="add-type">
+                <option value="paused"{{ ' selected' if sp.type == 'paused' else '' }}>Paused</option>
+                <option value="outdoor_credit"{{ ' selected' if sp.type == 'outdoor_credit' else '' }}>Activity credit</option>
+              </select>
+              <select name="credit_activity_id" class="add-type">
+                <option value="">Credit which activity?</option>
+                {% for a in activities %}
+                  <option value="{{ a.id }}"{{ ' selected' if sp.credit_activity_id == a.id else '' }}>{{ a.label }}</option>
+                {% endfor %}
+              </select>
+              <input type="date" name="start_date" value="{{ sp.start_date }}" class="set-text">
+              <input type="date" name="end_date" value="{{ sp.end_date }}" class="set-text">
+              <input type="number" name="outdoor_minutes_per_day" value="{{ sp.outdoor_minutes_per_day if sp.outdoor_minutes_per_day is not none else '' }}" class="set-num" placeholder="amount/day">
+              <div style="width:100%;margin-top:.5rem">
+                <details>
+                  <summary style="cursor:pointer;font-weight:600;margin-bottom:.4rem">Pause specific items during this period</summary>
+                  <div style="padding:.4rem 0 .2rem">
+                    {% for a in activities %}{% if a.enabled %}
+                    <label style="display:block;margin-bottom:.3rem">
+                      <input type="checkbox" name="paused_activities" value="{{ a.id }}"{{ ' checked' if a.id in sp.paused_activity_ids else '' }}>
+                      Pause {{ a.label }} requirement (doesn't count toward weekly target)
+                    </label>
+                    {% endif %}{% endfor %}
+                    {% if pauseable_chores %}
+                    <div class="set-hint" style="margin-bottom:.3rem">Chores to skip (won't appear on the checklist):</div>
+                    {% for ch in pauseable_chores %}
+                    <label style="display:block;margin-bottom:.2rem">
+                      <input type="checkbox" name="paused_chores" value="{{ ch.id }}"{{ ' checked' if ch.id in sp.paused_chore_ids else ''}}>
+                      {{ ch.name }} <span class="set-hint">({{ ch.type.replace('_',' ') }})</span>
+                    </label>
+                    {% endfor %}
+                    {% endif %}
+                  </div>
+                </details>
+              </div>
+              <div style="margin-top:.4rem;display:flex;gap:.4rem">
+                <button class="mini-btn primary" type="submit">Save</button>
+                <button class="mini-btn" type="button" onclick="toggleEdit({{ sp.id }})">Cancel</button>
+              </div>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+
+    <div style="margin-top:1rem"><strong>Add period</strong></div>
+    <form method="post" action="/admin/special/add" class="add-form" style="margin-top:.4rem;flex-wrap:wrap">
+      <input type="text" name="label" placeholder="Label (e.g. Summer vacation)" class="add-name" required>
+      <select name="type" class="add-type">
+        <option value="paused">Paused</option>
+        <option value="outdoor_credit">Activity credit</option>
+      </select>
+      <select name="credit_activity_id" class="add-type">
+        <option value="">Credit which activity?</option>
+        {% for a in activities %}<option value="{{ a.id }}">{{ a.label }}</option>{% endfor %}
+      </select>
+      <input type="date" name="start_date" class="set-text">
+      <input type="date" name="end_date" class="set-text">
+      <input type="number" name="outdoor_minutes_per_day" placeholder="amount/day" class="set-num">
+      <div style="width:100%;margin-top:.5rem">
+        <details>
+          <summary style="cursor:pointer;font-weight:600;margin-bottom:.4rem">Pause specific items during this period</summary>
+          <div style="padding:.4rem 0 .2rem">
+            {% for a in activities %}{% if a.enabled %}
+            <label style="display:block;margin-bottom:.3rem">
+              <input type="checkbox" name="paused_activities" value="{{ a.id }}">
+              Pause {{ a.label }} requirement
+            </label>
+            {% endif %}{% endfor %}
+            {% if pauseable_chores %}
+            <div class="set-hint" style="margin-bottom:.3rem">Chores to skip:</div>
+            {% for ch in pauseable_chores %}
+            <label style="display:block;margin-bottom:.2rem">
+              <input type="checkbox" name="paused_chores" value="{{ ch.id }}">
+              {{ ch.name }} <span class="set-hint">({{ ch.type.replace('_',' ') }})</span>
+            </label>
+            {% endfor %}
+            {% endif %}
+          </div>
+        </details>
+      </div>
+      <button class="mini-btn primary" type="submit" style="margin-top:.4rem">Add period</button>
+    </form>
+    <div class="set-hint" style="margin-top:.5rem">"Paused" weeks don't count toward goals or streaks. "Activity credit" auto-adds the given amount each weekday to the chosen activity. Paused items are skipped only on days within the period — goals for the rest of the week still apply.</div>
+  </section>
+
+  {# ---- Notifications ---- #}
+  <h2 class="admin-section-h">Notifications</h2>
+  <section class="card">
+    <form method="post" action="/admin/settings/notify">
+
+      <div class="set-row">
+        <label>Service
+          <select name="notify_service" id="notify-service" class="add-type" onchange="showNotifyFields()">
+            <option value="none"{{ ' selected' if notify_service == 'none' else '' }}>None (disabled)</option>
+            <option value="pushover"{{ ' selected' if notify_service == 'pushover' else '' }}>Pushover</option>
+            <option value="telegram"{{ ' selected' if notify_service == 'telegram' else '' }}>Telegram</option>
+            <option value="discord"{{ ' selected' if notify_service == 'discord' else '' }}>Discord</option>
+            <option value="slack"{{ ' selected' if notify_service == 'slack' else '' }}>Slack</option>
+            <option value="ntfy"{{ ' selected' if notify_service == 'ntfy' else '' }}>ntfy</option>
+            <option value="gotify"{{ ' selected' if notify_service == 'gotify' else '' }}>Gotify</option>
+            <option value="apprise"{{ ' selected' if notify_service == 'apprise' else '' }}>Apprise (advanced — raw URLs)</option>
+          </select>
+        </label>
+      </div>
+
+      {# --- Pushover --- #}
+      <div id="fields-pushover" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>App API Token
+            <input type="text" name="notify_pushover_app_token" value="{{ notify_pushover_app_token }}" class="set-text wide">
+          </label>
+        </div>
+        <div class="set-row">
+          <label>User Key
+            <input type="text" name="notify_pushover_user_key" value="{{ notify_pushover_user_key }}" class="set-text wide">
+          </label>
+        </div>
+        <div class="set-hint">Find these at <a href="https://pushover.net" target="_blank" rel="noopener">pushover.net</a> — App token from your app, User Key from your account dashboard.</div>
+      </div>
+
+      {# --- Telegram --- #}
+      <div id="fields-telegram" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>Bot Token
+            <input type="text" name="notify_telegram_token" value="{{ notify_telegram_token }}" class="set-text wide">
+          </label>
+        </div>
+        <div class="set-row">
+          <label>Chat ID
+            <input type="text" name="notify_telegram_chatid" value="{{ notify_telegram_chatid }}" class="set-text">
+          </label>
+        </div>
+        <div class="set-hint">Create a bot via <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> to get the token. Get your Chat ID by messaging <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a>.</div>
+      </div>
+
+      {# --- Discord --- #}
+      <div id="fields-discord" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>Webhook URL
+            <input type="text" name="notify_discord_webhook" value="{{ notify_discord_webhook }}" class="set-text wide" placeholder="https://discord.com/api/webhooks/...">
+          </label>
+        </div>
+        <div class="set-hint">In Discord: channel settings → Integrations → Webhooks → New Webhook → Copy URL.</div>
+      </div>
+
+      {# --- Slack --- #}
+      <div id="fields-slack" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>Incoming Webhook URL
+            <input type="text" name="notify_slack_webhook" value="{{ notify_slack_webhook }}" class="set-text wide" placeholder="https://hooks.slack.com/services/...">
+          </label>
+        </div>
+        <div class="set-hint">Create an incoming webhook at <a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noopener">api.slack.com</a>.</div>
+      </div>
+
+      {# --- ntfy --- #}
+      <div id="fields-ntfy" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>Topic
+            <input type="text" name="notify_ntfy_topic" value="{{ notify_ntfy_topic }}" class="set-text" placeholder="my-choreboard-abc123">
+          </label>
+        </div>
+        <div class="set-row">
+          <label>Self-hosted server URL <span class="set-hint">(leave blank to use ntfy.sh)</span>
+            <input type="text" name="notify_ntfy_host" value="{{ notify_ntfy_host }}" class="set-text wide" placeholder="https://ntfy.example.com">
+          </label>
+        </div>
+        <div class="set-hint">Subscribe to your topic in the <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy app</a>. Use a hard-to-guess topic name since ntfy.sh topics are public.</div>
+      </div>
+
+      {# --- Gotify --- #}
+      <div id="fields-gotify" class="notify-fields" hidden>
+        <div class="set-row">
+          <label>Server URL
+            <input type="text" name="notify_gotify_url" value="{{ notify_gotify_url }}" class="set-text wide" placeholder="https://gotify.example.com">
+          </label>
+        </div>
+        <div class="set-row">
+          <label>App Token
+            <input type="text" name="notify_gotify_token" value="{{ notify_gotify_token }}" class="set-text wide">
+          </label>
+        </div>
+        <div class="set-hint">Create an app in your Gotify server and copy its token.</div>
+      </div>
+
+      {# --- Apprise raw --- #}
+      <div id="fields-apprise" class="notify-fields" hidden>
+        <div class="set-row">
+          <label style="flex:1">Apprise URLs (one per line)
+            <textarea name="notify_urls" class="set-text wide" rows="4"
+                      placeholder="pover://AppToken/UserKey&#10;tgram://BotToken/ChatID">{{ notify_urls }}</textarea>
+          </label>
+        </div>
+        <div class="set-hint">Supports 80+ services. See the <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noopener">Apprise wiki</a> for all URL formats.</div>
+      </div>
+
+      <div style="margin-top:.75rem">
+        <label><input type="checkbox" name="passphrase_required"{{ ' checked' if passphrase_required_val else '' }}>&nbsp;Lock kid pages — kids must enter their passphrase to view their page</label>
+      </div>
+      <div style="margin-top:.75rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <button class="mini-btn primary" type="submit">Save notifications</button>
+      </div>
+    </form>
+    <form method="post" action="/admin/settings/notify/test" style="margin-top:.5rem">
+      <button class="mini-btn" type="submit">Send test notification</button>
+      <span class="set-hint" style="margin-left:.5rem">Uses currently saved settings</span>
+    </form>
+  </section>
+
+  <script>
+  function showNotifyFields() {
+    var sel = document.getElementById('notify-service').value;
+    document.querySelectorAll('.notify-fields').forEach(function(el) { el.hidden = true; });
+    var target = document.getElementById('fields-' + sel);
+    if (target) target.hidden = false;
+  }
+  showNotifyFields();
+  </script>
+
+  {# ---- Data export / import ---- #}
+  <h2 class="admin-section-h">Data export &amp; import</h2>
+  <section class="card">
+    <div style="margin-bottom:1rem">
+      <a href="/admin/export" class="mini-btn primary">Download JSON export</a>
+      <span class="set-hint" style="margin-left:.75rem">Exports all data (kids, chores, logs, settings) as JSON.</span>
+    </div>
+    {% if request.args.get('import_done') %}
+      <div class="saved-banner">Import complete — all data replaced.</div>
+    {% elif request.args.get('import_error') %}
+      <div class="login-error">Import failed — make sure you're uploading a valid Choreify JSON export.</div>
+    {% endif %}
+    <form method="post" action="/admin/import" enctype="multipart/form-data">
+      <div class="set-row" style="align-items:center">
+        <input type="file" name="import_file" accept=".json" required style="font-size:14px">
+        <button type="submit" class="mini-btn danger"
+                onclick="return confirm('This will replace ALL current data. Continue?')">
+          Restore from export
+        </button>
+      </div>
+      <div class="set-hint">Replaces all kids, chores, logs, and settings with the contents of the file.</div>
+    </form>
+  </section>
+
+  {# ---- Password ---- #}
+  <h2 class="admin-section-h">Admin password</h2>
+  <section class="card">
+    {% if pwerror %}<div class="login-error">Couldn't change password — check the current password and that the new ones match.</div>{% endif %}
+    <form method="post" action="/admin/settings/password">
+      <div class="set-row"><label>Current<input type="password" name="current" class="set-text"></label></div>
+      <div class="set-row"><label>New<input type="password" name="new" class="set-text"></label></div>
+      <div class="set-row"><label>Confirm new<input type="password" name="confirm" class="set-text"></label></div>
+      <button class="mini-btn primary" type="submit">Change password</button>
+    </form>
+  </section>
+
+
+</div>
+<script>
+function toggleEdit(id) {
+  var row = document.getElementById("edit-" + id) || document.getElementById(String(id));
+  if (row) { row.hidden = !row.hidden; }
+}
+function autoSlug(nameInput, slugId) {
+  var slugEl = document.getElementById(slugId);
+  if (!slugEl || slugEl.dataset.userEdited) { return; }
+  slugEl.value = nameInput.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+}
+document.addEventListener('DOMContentLoaded', function() {
+  var slugEl = document.getElementById('new-kid-slug');
+  if (slugEl) {
+    slugEl.addEventListener('input', function() { slugEl.dataset.userEdited = '1'; });
+  }
+});
+</script>
+</body>
+</html>

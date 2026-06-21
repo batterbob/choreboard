@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>{{ kid.name }} — {{ app_name }}</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<div class="page">
+
+  <header class="topbar">
+    <h1 class="kid-name">{{ kid.name }}</h1>
+    <div class="today-date">{{ today_long }}</div>
+  </header>
+
+  {% if banner.state == "out_of_program" %}
+    <div class="banner banner-break">
+      <div class="banner-big">{{ app_name }} isn't running right now ☀️</div>
+      <div class="banner-sub">Enjoy your time off — check back when camp starts!</div>
+    </div>
+  {% else %}
+
+    {# ---- Scoreboard (stars + streak + allowance) ---- #}
+    <div class="scoreboard">
+      {% if stars > 0 %}
+        <span class="stars">{{ "⭐" * [stars, 10] | min }}</span>
+        <span class="stars-label">{{ stars }} bonus week{{ "s" if stars != 1 else "" }}!</span>
+      {% else %}
+        <span class="stars-label">Earn your first bonus star this week!</span>
+      {% endif %}
+      {% if streak > 1 %}<span class="streak">🔥 {{ streak }}-week streak</span>{% endif %}
+      {% if total_earned is not none %}
+        <span class="allowance-earned">💰 ${{ "%.2f"|format(total_earned) }} total earned</span>
+      {% endif %}
+      {% if points_enabled %}
+        <span class="allowance-earned">🏅 {{ week_points }} point{{ "s" if week_points != 1 else "" }} this week{% if points_dollars is not none %} · ${{ "%.2f"|format(points_dollars) }}{% endif %}</span>
+      {% endif %}
+    </div>
+    {% if reward %}<div class="reward-line">🎯 {{ reward }}</div>{% endif %}
+
+    {# ---- Weekly status banner ---- #}
+    {% if banner.state == "on_break" %}
+      <div class="banner banner-break">
+        <div class="banner-big">On break ☀️ — enjoy your trip!</div>
+      </div>
+    {% elif banner.state == "earned" %}
+      <div class="banner banner-green">
+        <div class="banner-big">✅ You earned your bonus screen time next week!</div>
+      </div>
+    {% elif banner.state == "on_track" %}
+      <div class="banner banner-green">
+        <div class="banner-big">🟢 On track for bonus screen time — keep it up!</div>
+      </div>
+    {% else %}
+      <div class="banner banner-red">
+        <div class="banner-big">🔴 Bonus screen time at risk — keep going!</div>
+      </div>
+    {% endif %}
+
+    {# ---- Make-up Monday banner ---- #}
+    {% if makeup %}
+      <div class="banner banner-makeup" id="makeup-banner">
+        <div class="banner-big">Bonus locked — earn it back today!</div>
+        <ul class="makeup-list">
+          {% for it in makeup.items %}
+            <li>{{ it.left }}{% if it.unit == 'minutes' %} more min of{% endif %} {{ it.label }}</li>
+          {% endfor %}
+          <li>Finish your checklist</li>
+        </ul>
+      </div>
+    {% endif %}
+
+    {# ---- Rotating chore info line ---- #}
+    {% if rotation %}
+      <div class="rotation">Your rotation this week: <strong>{{ rotation }}</strong></div>
+    {% endif %}
+
+    {# Two-column on iPad landscape (>=900px); single column on phone/portrait. #}
+    <div class="content-grid">
+    <div class="col col-chores">
+
+    {# ---- Daily checklist ---- #}
+    <section class="card" id="checklist-card">
+      <h2>Daily Checklist</h2>
+      <div id="celebration" class="celebration" {% if not checklist_done %}hidden{% endif %}>
+        🎉 All done! Your parent has been notified.
+      </div>
+      <div id="checklist" {% if checklist_done %}hidden{% endif %}>
+        {% for c in daily %}
+          <button type="button"
+                  class="check-row{% if c.done %} checked locked{% endif %}{% if c.overdue %} alt-overdue{% endif %}"
+                  data-kind="{{ c.kind }}" data-id="{{ c.id }}"
+                  {% if c.done %}disabled aria-disabled="true"{% endif %}>
+            <span class="checkbox">{% if c.done %}✓{% endif %}</span>
+            <span class="check-label">{{ c.name }}
+              {% if c.notes %}<span class="chore-notes">{{ c.notes }}</span>{% endif %}
+              {% if c.overdue %}<span class="alt-note">overdue — do it today!</span>{% endif %}
+            </span>
+          </button>
+        {% endfor %}
+      </div>
+    </section>
+
+    {# ---- Weekly chores (v1.2) ---- #}
+    {% if weekly %}
+      <section class="card" id="weekly-card">
+        <h2>This week</h2>
+        <div class="weekly-hint">Finish these by Sunday 🗓️</div>
+        {% for w in weekly %}
+          <button type="button"
+                  class="check-row{% if w.done %} checked locked{% endif %}"
+                  data-kind="weekly" data-id="{{ w.id }}"
+                  {% if w.done %}disabled aria-disabled="true"{% endif %}>
+            <span class="checkbox">{% if w.done %}✓{% endif %}</span>
+            <span class="check-label">{{ w.name }}
+              {% if w.notes %}<span class="chore-notes">{{ w.notes }}</span>{% endif %}
+            </span>
+          </button>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    {# ---- Scheduled / coming-up chores (v1.3) ---- #}
+    {% if scheduled %}
+      <section class="card" id="scheduled-card">
+        <h2>Coming up</h2>
+        {% for s in scheduled %}
+          <button type="button"
+                  class="check-row sched-{{ s.state }}{% if s.done %} checked locked{% endif %}"
+                  data-kind="scheduled" data-id="{{ s.id }}"
+                  {% if s.done %}disabled aria-disabled="true"{% endif %}>
+            <span class="checkbox">{% if s.done %}✓{% endif %}</span>
+            <span class="check-label">{{ s.name }}
+              {% if s.notes %}<span class="chore-notes">{{ s.notes }}</span>{% endif %}
+              <span class="sched-note">
+                {%- if s.state == 'countdown' %}in {{ s.days_until }} day{{ 's' if s.days_until != 1 else '' }}{% if s.due_label %} · {{ s.due_label }}{% endif %}
+                {%- elif s.state == 'due_today' %}due today!{% if s.due_label %} · {{ s.due_label }}{% endif %}
+                {%- elif s.state == 'overdue' %}overdue — do it now!
+                {%- elif s.state == 'done' %}done ✓{% endif %}
+              </span>
+            </span>
+          </button>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    {# ---- As-needed chores ---- #}
+    {% if as_needed %}
+      <section class="card" id="asneeded-card">
+        <h2>Your parent assigned you this today:</h2>
+        {% for a in as_needed %}
+          <button type="button"
+                  class="check-row{% if a.done %} checked locked{% endif %}"
+                  data-kind="as_needed" data-id="{{ a.id }}"
+                  {% if a.done %}disabled aria-disabled="true"{% endif %}>
+            <span class="checkbox">{% if a.done %}✓{% endif %}</span>
+            <span class="check-label">{{ a.name }}
+              {% if a.notes %}<span class="chore-notes">{{ a.notes }}</span>{% endif %}
+            </span>
+          </button>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    </div>{# /col-chores #}
+    <div class="col col-logs">
+
+    {# ---- Activity logs (one section per enabled activity) ---- #}
+    {% for s in activity_sections %}
+      {% include "_log_section.html" %}
+    {% endfor %}
+
+    </div>{# /col-logs #}
+    </div>{# /content-grid #}
+
+    {# ---- Bonus history (last 5 weeks) ---- #}
+    {% if bonus_history %}
+      <section class="card" id="history-card">
+        <h2>Recent weeks</h2>
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Week</th>
+              {% for col in bonus_history[0].cols %}<th>{{ col.label }}</th>{% endfor %}
+              <th>Bonus</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in bonus_history %}
+              <tr class="{% if h.earned %}hist-earned{% else %}hist-missed{% endif %}">
+                <td>{{ h.label }}</td>
+                {% for col in h.cols %}<td>{{ col.cell }}</td>{% endfor %}
+                <td>{% if h.earned %}⭐{% else %}—{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if bonus_dollars is not none %}
+          <div class="history-total">Total earned: ${{ "%.2f"|format(total_earned) }}</div>
+        {% endif %}
+      </section>
+    {% endif %}
+
+  {% endif %}{# end in-program #}
+
+</div>
+
+<div id="toast" class="toast" hidden>
+  <span id="toast-msg"></span>
+  <button type="button" id="toast-undo" class="toast-undo">Undo</button>
+</div>
+
+<script>
+  window.CHORE = {
+    slug: {{ kid.url_slug | tojson }},
+    debug: {{ 'true' if debug else 'false' }},
+    today: {{ render_today | tojson }}
+  };
+</script>
+<script src="/static/confetti.min.js"></script>
+<script src="/static/kid.js?v=4"></script>
+</body>
+</html>
