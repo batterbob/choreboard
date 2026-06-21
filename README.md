@@ -112,27 +112,6 @@ For scheduler monitoring, set `HEALTHCHECK_URL` in your `.env`. The scheduler pi
 
 ---
 
-## Local development
-
-```bash
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
-
-$env:CHORE_DEBUG = "1"
-.\.venv\Scripts\python app.py
-```
-
-Open `http://localhost:7823` — the setup wizard runs on first visit.
-
-If you want to skip setup and use seed data for testing:
-
-```bash
-# The test suite seeds its own in-memory database automatically
-.\.venv\Scripts\python -m unittest discover -s tests
-```
-
----
-
 ## How it works
 
 **Single process.** The app runs single-process so the background scheduler fires exactly once. Don't put it behind a multi-worker server.
@@ -152,12 +131,3 @@ If you want to skip setup and use seed data for testing:
 
 **Special periods.** Vacation periods pause the program (no chores, no reminders). Activity-credit periods auto-log outdoor minutes for camp, travel, or any other structured program.
 
----
-
-## Tests
-
-49 unit tests covering the date math, prorated goals, activity credit, pace guards, make-up Monday, scoreboard and streaks, chore rotation, and the reminder/summary scheduler decisions.
-
-```bash
-.\.venv\Scripts\python -m unittest discover -s tests
-```
