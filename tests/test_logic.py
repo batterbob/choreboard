@@ -39,6 +39,22 @@ def complete_checklist(conn, kid, d):
     conn.commit()
 
 
+def add_log(conn, key, kid, dstr, amount):
+    """Insert a manual activity log for the activity with the given key."""
+    aid = logic.activity_by_key(conn, key)["id"]
+    conn.execute(
+        "INSERT INTO activity_logs (activity_id, kid_id, log_date, amount, source, logged_at) "
+        "VALUES (?,?,?,?, 'manual', ?)", (aid, kid, dstr, amount, logic.now_iso(ENV)))
+    conn.commit()
+
+
+def count_credit_logs(conn, key, kid):
+    """Number of auto-credited logs for the activity with the given key."""
+    return conn.execute(
+        "SELECT COUNT(*) AS c FROM activity_logs al JOIN activities a ON a.id = al.activity_id "
+        "WHERE a.key=? AND al.kid_id=? AND al.source='credit_auto'", (key, kid)).fetchone()["c"]
+
+
 class DateMath(unittest.TestCase):
     def test_week_start_is_monday(self):
         # 2026-06-24 is a Wednesday; its Monday is 2026-06-22.
@@ -85,9 +101,7 @@ class CampCredit(unittest.TestCase):
         # Run twice; must not double-count.
         logic.ensure_camp_credit(self.conn, date(2026, 8, 1))
         logic.ensure_camp_credit(self.conn, date(2026, 8, 1))
-        n = self.conn.execute(
-            "SELECT COUNT(*) c FROM outdoor_logs WHERE kid_id=? AND source='camp_auto'",
-            (a,)).fetchone()["c"]
+        n = count_credit_logs(self.conn, "outdoor", a)
         # Camp Jul20-31: weekdays = Jul20-24 and Jul27-31 = 10 days.
         self.assertEqual(n, 10)
         # Camp week Jul20-26: 5 weekdays x 60 = 300 = exactly the outdoor goal.
@@ -96,9 +110,7 @@ class CampCredit(unittest.TestCase):
     def test_credit_not_granted_before_today(self):
         a = kid_id(self.conn, "alex")
         logic.ensure_camp_credit(self.conn, date(2026, 7, 22))  # mid-camp
-        n = self.conn.execute(
-            "SELECT COUNT(*) c FROM outdoor_logs WHERE kid_id=? AND source='camp_auto'",
-            (a,)).fetchone()["c"]
+        n = count_credit_logs(self.conn, "outdoor", a)
         self.assertEqual(n, 3)  # only Jul20, 21, 22 credited so far
 
 
@@ -150,13 +162,8 @@ class MakeupMonday(unittest.TestCase):
 
     def test_miss_creates_deficit_then_reinstates(self):
         # Week 1 (Jun22-28): log below target so it finalizes as a miss.
-        self.conn.execute(
-            "INSERT INTO reading_logs (kid_id, log_date, minutes, source, logged_at) "
-            "VALUES (?,?,100,'manual',?)", (self.a, "2026-06-24", logic.now_iso(ENV)))
-        self.conn.execute(
-            "INSERT INTO outdoor_logs (kid_id, log_date, minutes, source, logged_at) "
-            "VALUES (?,?,200,'manual',?)", (self.a, "2026-06-24", logic.now_iso(ENV)))
-        self.conn.commit()
+        add_log(self.conn, "reading", self.a, "2026-06-24", 100)
+        add_log(self.conn, "outdoor", self.a, "2026-06-24", 200)
 
         logic.finalize_past_weeks(self.conn, date(2026, 6, 30))  # week is now past
         owed = self.conn.execute(
@@ -171,13 +178,8 @@ class MakeupMonday(unittest.TestCase):
         self.assertIsNone(logic.check_makeup_reinstatement(self.conn, self.a, monday))
 
         # Make it up on Monday: deficit minutes + complete checklist.
-        self.conn.execute(
-            "INSERT INTO reading_logs (kid_id, log_date, minutes, source, logged_at) "
-            "VALUES (?,?,75,'manual',?)", (self.a, "2026-06-29", logic.now_iso(ENV)))
-        self.conn.execute(
-            "INSERT INTO outdoor_logs (kid_id, log_date, minutes, source, logged_at) "
-            "VALUES (?,?,100,'manual',?)", (self.a, "2026-06-29", logic.now_iso(ENV)))
-        self.conn.commit()
+        add_log(self.conn, "reading", self.a, "2026-06-29", 75)
+        add_log(self.conn, "outdoor", self.a, "2026-06-29", 100)
         complete_checklist(self.conn, self.a, monday)
 
         row = logic.check_makeup_reinstatement(self.conn, self.a, monday)
@@ -215,8 +217,8 @@ class ChoresOnlyBonus(unittest.TestCase):
     daily checklist on enough days of the week."""
     def setUp(self):
         self.conn = fresh_db()
-        logic.set_setting(self.conn, "reading_enabled", "0")
-        logic.set_setting(self.conn, "outdoor_enabled", "0")
+        self.conn.execute("UPDATE activities SET enabled=0")  # chores-only mode
+        self.conn.commit()
         self.a = kid_id(self.conn, "alex")
         # Jun22-28 is a fully active (7-day) week in the seed program window.
         self.week = [date(2026, 6, d) for d in range(22, 29)]
@@ -243,6 +245,41 @@ class ChoresOnlyBonus(unittest.TestCase):
         for d in self.week[:5]:  # exactly 5 days
             complete_checklist(self.conn, self.a, d)
         self.assertEqual(self._bonus(), 1)
+
+
+class GenericActivities(unittest.TestCase):
+    """A third, count-unit activity participates in the weekly bonus."""
+    def setUp(self):
+        self.conn = fresh_db()
+        self.a = kid_id(self.conn, "alex")
+        self.ws = date(2026, 6, 22)
+        self.conn.execute(
+            "INSERT INTO activities (key, label, unit, enabled, sort_order, "
+            "supports_credit, default_target) VALUES ('water','Water','count',1,2,0,5)")
+        self.conn.commit()
+
+    def _bonus(self):
+        logic.finalize_past_weeks(self.conn, date(2026, 6, 30))
+        return self.conn.execute(
+            "SELECT bonus_earned FROM weekly_results "
+            "WHERE kid_id=? AND week_start_date='2026-06-22'", (self.a,)).fetchone()["bonus_earned"]
+
+    def test_third_activity_gates_bonus(self):
+        add_log(self.conn, "reading", self.a, "2026-06-24", 175)
+        add_log(self.conn, "outdoor", self.a, "2026-06-24", 300)
+        self.assertEqual(self._bonus(), 0)  # water target unmet
+
+    def test_all_three_met_earns_bonus(self):
+        add_log(self.conn, "reading", self.a, "2026-06-24", 175)
+        add_log(self.conn, "outdoor", self.a, "2026-06-24", 300)
+        add_log(self.conn, "water", self.a, "2026-06-24", 5)
+        self.assertEqual(self._bonus(), 1)
+
+    def test_default_target_used_without_override(self):
+        water = logic.activity_by_key(self.conn, "water")
+        alex = logic.kid_by_slug(self.conn, "alex")
+        t = logic.prorated_targets(self.conn, alex, self.ws)
+        self.assertEqual(t["by_activity"][water["id"]], 5)
 
 
 class ChorePoints(unittest.TestCase):
