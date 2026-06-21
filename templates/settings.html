@@ -15,7 +15,7 @@
       <a href="/admin">Dashboard</a>
       <a href="/status">Status</a>
       <a href="/admin/history">History</a>
-      <a href="/admin/logs">Logs</a>
+      <a href="/admin/logs">Activity Logs</a>
       <a href="/admin/applog">Server Log</a>
       <a href="/admin/settings">Settings</a>
       {% for k in nav_kids %}<a href="/{{ k.slug }}">{{ k.name }}</a>{% endfor %}
@@ -52,9 +52,8 @@
   {# ---- Activities ---- #}
   <h2 class="admin-section-h">Activities</h2>
   <section class="card">
-    <div class="set-hint" style="margin-bottom:.75rem">Activities are the timed or counted things kids log (reading, outdoor time, glasses of water…). Disable all of them for a chores-only setup. The weekly bonus needs every <em>enabled</em> activity's target met.</div>
     <table class="chore-table">
-      <tr><th>Label</th><th>Unit</th><th>Default target</th><th>On</th><th></th><th></th></tr>
+      <tr><th>Label</th><th>Unit</th><th>Default target</th><th>On</th><th>Edit</th><th></th></tr>
       {% for a in activities %}
         <tr>
           <td>{{ a.label }}</td>
@@ -90,9 +89,8 @@
         </tr>
       {% endfor %}
     </table>
-    <div style="margin-top:1rem"><strong>Add activity</strong></div>
-    <form method="post" action="/admin/settings/activity/add" class="add-form" style="margin-top:.4rem">
-      <input type="text" name="label" placeholder="e.g. Water" class="add-name" required>
+    <form method="post" action="/admin/settings/activity/add" class="add-form">
+      <input type="text" name="label" placeholder="New activity name" class="add-name" required>
       <select name="unit" class="add-type">
         <option value="minutes">minutes</option>
         <option value="count">count</option>
@@ -101,6 +99,7 @@
         <input type="number" name="default_target" value="0" min="0" class="set-num"></label>
       <button class="mini-btn primary" type="submit">Add activity</button>
     </form>
+    <div class="set-hint" style="margin-top:.75rem">Activities are the timed or counted things kids log (reading, outdoor time, glasses of water…). Disable all of them for a chores-only setup. The weekly bonus needs every <em>enabled</em> activity's target met.</div>
   </section>
 
   {# ---- Kid management ---- #}

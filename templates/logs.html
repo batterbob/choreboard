@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ app_name }} — Logs</title>
+  <title>{{ app_name }} — Edit Activity Logs</title>
   <link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
@@ -12,14 +12,14 @@
 
   <header class="admin-bar">
     <div>
-      <h1 class="admin-title">Edit logs</h1>
+      <h1 class="admin-title">Edit Activity Logs</h1>
       <div class="today-date">Week of {{ week_label }}</div>
     </div>
     <nav class="admin-nav">
       <a href="/admin">Dashboard</a>
       <a href="/status">Status</a>
       <a href="/admin/history">History</a>
-      <a href="/admin/logs">Logs</a>
+      <a href="/admin/logs">Activity Logs</a>
       <a href="/admin/applog">Server Log</a>
       <a href="/admin/settings">Settings</a>
       {% for k in nav_kids %}<a href="/{{ k.slug }}">{{ k.name }}</a>{% endfor %}
@@ -27,7 +27,7 @@
     </nav>
   </header>
 
-  <div class="set-hint">Fix this week's activity entries. Camp auto-credit is shown but not editable.</div>
+  <div class="set-hint">Use this page to correct a kid's activity entries for the current week — for example, if they logged the wrong number of minutes or you need to remove a duplicate entry. Only manual entries (logged by the kid) can be edited or deleted. Entries added automatically by the system (vacation credits) are shown for reference but cannot be changed here.</div>
 
   <div class="status-grid">
     {% for k in kids %}
