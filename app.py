@@ -1388,7 +1388,7 @@ def setup_wizard():
     return render_template("setup.html", common_tz=common_tz)
 
 
-# ---- Data export --------------------------------------------------------- #
+# ---- Data export / import ------------------------------------------------ #
 @app.route("/admin/export")
 @require_admin
 def admin_export():
@@ -1397,7 +1397,7 @@ def admin_export():
     tables = ["kids", "chores", "chore_completions", "as_needed_assignments",
               "weekly_assignments", "rotating_chore_assignments", "reading_logs",
               "outdoor_logs", "settings", "notifications_sent", "weekly_results",
-              "special_periods", "makeup_owed"]
+              "special_periods", "special_period_paused_chores", "makeup_owed"]
     data = {}
     for t in tables:
         try:
@@ -1409,6 +1409,50 @@ def admin_export():
     payload = _json.dumps(data, indent=2, default=str)
     return Response(payload, mimetype="application/json",
                     headers={"Content-Disposition": "attachment; filename=choreboard_export.json"})
+
+
+@app.route("/admin/import", methods=["POST"])
+@require_admin
+def admin_import():
+    import json as _json
+    f = request.files.get("import_file")
+    if not f or not f.filename.endswith(".json"):
+        return redirect("/admin/settings?import_error=bad_file")
+    try:
+        data = _json.loads(f.read().decode("utf-8"))
+    except Exception:
+        return redirect("/admin/settings?import_error=bad_file")
+    if not isinstance(data, dict):
+        return redirect("/admin/settings?import_error=bad_file")
+
+    # Import order matters for FK constraints; disable them during the replace.
+    tables = ["kids", "chores", "chore_completions", "as_needed_assignments",
+              "weekly_assignments", "rotating_chore_assignments", "reading_logs",
+              "outdoor_logs", "settings", "notifications_sent", "weekly_results",
+              "special_periods", "special_period_paused_chores", "makeup_owed"]
+    conn = get_db()
+    try:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        for t in tables:
+            rows = data.get(t)
+            if rows is None:
+                continue
+            conn.execute("DELETE FROM %s" % t)
+            if not rows:
+                continue
+            cols = list(rows[0].keys())
+            placeholders = ",".join(["?"] * len(cols))
+            conn.executemany(
+                "INSERT OR IGNORE INTO %s (%s) VALUES (%s)" % (t, ",".join(cols), placeholders),
+                [[r.get(c) for c in cols] for r in rows])
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        app.logger.error("Import failed: %s", exc)
+        return redirect("/admin/settings?import_error=failed")
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+    return redirect("/admin/settings?import_done=1")
 
 
 # Populate kid paths for the no-store filter now that the DB is seeded.

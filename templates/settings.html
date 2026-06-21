@@ -436,11 +436,28 @@
   showNotifyFields();
   </script>
 
-  {# ---- Data export ---- #}
-  <h2 class="admin-section-h">Data export</h2>
+  {# ---- Data export / import ---- #}
+  <h2 class="admin-section-h">Data export &amp; import</h2>
   <section class="card">
-    <a href="/admin/export" class="mini-btn primary">Download JSON export</a>
-    <span class="set-hint" style="margin-left:.75rem">Exports all data (kids, chores, logs, settings) as JSON.</span>
+    <div style="margin-bottom:1rem">
+      <a href="/admin/export" class="mini-btn primary">Download JSON export</a>
+      <span class="set-hint" style="margin-left:.75rem">Exports all data (kids, chores, logs, settings) as JSON.</span>
+    </div>
+    {% if request.args.get('import_done') %}
+      <div class="saved-banner">Import complete — all data replaced.</div>
+    {% elif request.args.get('import_error') %}
+      <div class="login-error">Import failed — make sure you're uploading a valid ChoreBoard JSON export.</div>
+    {% endif %}
+    <form method="post" action="/admin/import" enctype="multipart/form-data">
+      <div class="set-row" style="align-items:center">
+        <input type="file" name="import_file" accept=".json" required style="font-size:14px">
+        <button type="submit" class="mini-btn danger"
+                onclick="return confirm('This will replace ALL current data. Continue?')">
+          Restore from export
+        </button>
+      </div>
+      <div class="set-hint">Replaces all kids, chores, logs, and settings with the contents of the file.</div>
+    </form>
   </section>
 
   {# ---- Password ---- #}
