@@ -10,7 +10,7 @@ from datetime import datetime
 from hashlib import scrypt
 from hmac import compare_digest
 
-# Default data dir is ./data (a TrueNAS volume in prod). Overridable for tests.
+# Default data dir is ./data (mounted as a Docker volume in prod). Overridable for tests.
 DATA_DIR = os.environ.get("CHORE_DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
 DB_PATH = os.environ.get("CHORE_DB_PATH", os.path.join(DATA_DIR, "chore_tracker.db"))
 
@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS chores (
     due_weekday INTEGER,
     reminder_lead_days INTEGER,
     due_label TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    notes TEXT
 );
 
 CREATE TABLE IF NOT EXISTS chore_completions (
@@ -214,6 +215,7 @@ def init_db(conn, env=None):
     _ensure_column(conn, "kids", "passphrase_hash", "TEXT")
     _ensure_column(conn, "special_periods", "pause_reading", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "special_periods", "pause_outdoor", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "chores", "notes", "TEXT")
     _migrate_bins_to_scheduled(conn)
     conn.commit()
     if conn.execute("SELECT COUNT(*) AS n FROM kids").fetchone()["n"] == 0:
@@ -229,6 +231,7 @@ def init_db(conn, env=None):
         _ensure_setting(conn, "outdoor_enabled", "1")
         _ensure_setting(conn, "notify_urls", "")
         _ensure_setting(conn, "passphrase_required", "0")
+        _ensure_setting(conn, "bonus_dollar_amount", "")
         _ensure_setting(conn, "setup_complete", "1")  # treat existing DBs as already set up
     conn.commit()
 
@@ -309,8 +312,8 @@ def seed_test_data(conn, env=None):
     conn.executemany(
         "INSERT INTO kids (name, url_slug, active, reading_target_minutes, "
         "outdoor_target_minutes, created_at) VALUES (?,?,1,?,?,?)",
-        [("Andrew", "andrew", reading_target, outdoor_target, ts),
-         ("Daniel", "daniel", reading_target, outdoor_target, ts)])
+        [("Alex", "alex", reading_target, outdoor_target, ts),
+         ("Jordan", "jordan", reading_target, outdoor_target, ts)])
 
     daily = ["Make your bed", "Empty the dishwasher",
              "Tidy common areas (living room & family room)"]
@@ -329,8 +332,8 @@ def seed_test_data(conn, env=None):
     conn.execute("INSERT INTO chores (name, type, is_rotating, active, created_at) "
                  "VALUES ('Clean your room', 'weekly', 0, 1, ?)", (ts,))
 
-    andrew = conn.execute("SELECT id FROM kids WHERE url_slug='andrew'").fetchone()["id"]
-    daniel = conn.execute("SELECT id FROM kids WHERE url_slug='daniel'").fetchone()["id"]
+    kid1 = conn.execute("SELECT id FROM kids WHERE url_slug='alex'").fetchone()["id"]
+    kid2 = conn.execute("SELECT id FROM kids WHERE url_slug='jordan'").fetchone()["id"]
     trash = conn.execute("SELECT id FROM chores WHERE name=?",
                          ("Take indoor trash to outdoor bins",)).fetchone()["id"]
     bins = conn.execute("SELECT id FROM chores WHERE name=?",
@@ -339,16 +342,16 @@ def seed_test_data(conn, env=None):
                               ("Clean your room",)).fetchone()["id"]
     week1 = "2026-06-22"
     conn.execute("INSERT INTO rotating_chore_assignments (chore_id, kid_id, "
-                 "week_start_date, is_override) VALUES (?,?,?,0)", (trash, andrew, week1))
+                 "week_start_date, is_override) VALUES (?,?,?,0)", (trash, kid1, week1))
     conn.execute("INSERT INTO rotating_chore_assignments (chore_id, kid_id, "
-                 "week_start_date, is_override) VALUES (?,?,?,0)", (bins, daniel, week1))
+                 "week_start_date, is_override) VALUES (?,?,?,0)", (bins, kid2, week1))
     conn.executemany("INSERT INTO weekly_assignments (chore_id, kid_id, created_at) "
                      "VALUES (?,?,?)",
-                     [(clean_room, andrew, ts), (clean_room, daniel, ts)])
+                     [(clean_room, kid1, ts), (clean_room, kid2, ts)])
     for row in conn.execute("SELECT id FROM chores WHERE type='daily'").fetchall():
         conn.executemany("INSERT OR IGNORE INTO weekly_assignments (chore_id, kid_id, "
                          "created_at) VALUES (?,?,?)",
-                         [(row["id"], andrew, ts), (row["id"], daniel, ts)])
+                         [(row["id"], kid1, ts), (row["id"], kid2, ts)])
 
     conn.executemany("INSERT INTO special_periods (label, type, start_date, end_date, "
                      "outdoor_minutes_per_day) VALUES (?,?,?,?,?)",

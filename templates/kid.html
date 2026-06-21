@@ -22,15 +22,18 @@
     </div>
   {% else %}
 
-    {# ---- Scoreboard (stars + streak) ---- #}
+    {# ---- Scoreboard (stars + streak + allowance) ---- #}
     <div class="scoreboard">
       {% if stars > 0 %}
-        <span class="stars">{{ "⭐" * stars }}</span>
+        <span class="stars">{{ "⭐" * [stars, 10] | min }}</span>
         <span class="stars-label">{{ stars }} bonus week{{ "s" if stars != 1 else "" }}!</span>
       {% else %}
         <span class="stars-label">Earn your first bonus star this week!</span>
       {% endif %}
       {% if streak > 1 %}<span class="streak">🔥 {{ streak }}-week streak</span>{% endif %}
+      {% if total_earned is not none %}
+        <span class="allowance-earned">💰 ${{ "%.2f"|format(total_earned) }} total earned</span>
+      {% endif %}
     </div>
     {% if reward %}<div class="reward-line">🎯 {{ reward }}</div>{% endif %}
 
@@ -78,7 +81,7 @@
     <section class="card" id="checklist-card">
       <h2>Daily Checklist</h2>
       <div id="celebration" class="celebration" {% if not checklist_done %}hidden{% endif %}>
-        🎉 All done! Dad has been notified.
+        🎉 All done! Your parent has been notified.
       </div>
       <div id="checklist" {% if checklist_done %}hidden{% endif %}>
         {% for c in daily %}
@@ -88,6 +91,7 @@
                   {% if c.done %}disabled aria-disabled="true"{% endif %}>
             <span class="checkbox">{% if c.done %}✓{% endif %}</span>
             <span class="check-label">{{ c.name }}
+              {% if c.notes %}<span class="chore-notes">{{ c.notes }}</span>{% endif %}
               {% if c.overdue %}<span class="alt-note">overdue — do it today!</span>{% endif %}
             </span>
           </button>
@@ -106,7 +110,9 @@
                   data-kind="weekly" data-id="{{ w.id }}"
                   {% if w.done %}disabled aria-disabled="true"{% endif %}>
             <span class="checkbox">{% if w.done %}✓{% endif %}</span>
-            <span class="check-label">{{ w.name }}</span>
+            <span class="check-label">{{ w.name }}
+              {% if w.notes %}<span class="chore-notes">{{ w.notes }}</span>{% endif %}
+            </span>
           </button>
         {% endfor %}
       </section>
@@ -123,6 +129,7 @@
                   {% if s.done %}disabled aria-disabled="true"{% endif %}>
             <span class="checkbox">{% if s.done %}✓{% endif %}</span>
             <span class="check-label">{{ s.name }}
+              {% if s.notes %}<span class="chore-notes">{{ s.notes }}</span>{% endif %}
               <span class="sched-note">
                 {%- if s.state == 'countdown' %}in {{ s.days_until }} day{{ 's' if s.days_until != 1 else '' }}{% if s.due_label %} · {{ s.due_label }}{% endif %}
                 {%- elif s.state == 'due_today' %}due today!{% if s.due_label %} · {{ s.due_label }}{% endif %}
@@ -138,14 +145,16 @@
     {# ---- As-needed chores ---- #}
     {% if as_needed %}
       <section class="card" id="asneeded-card">
-        <h2>Dad assigned you this today:</h2>
+        <h2>Your parent assigned you this today:</h2>
         {% for a in as_needed %}
           <button type="button"
                   class="check-row{% if a.done %} checked locked{% endif %}"
                   data-kind="as_needed" data-id="{{ a.id }}"
                   {% if a.done %}disabled aria-disabled="true"{% endif %}>
             <span class="checkbox">{% if a.done %}✓{% endif %}</span>
-            <span class="check-label">{{ a.name }}</span>
+            <span class="check-label">{{ a.name }}
+              {% if a.notes %}<span class="chore-notes">{{ a.notes }}</span>{% endif %}
+            </span>
           </button>
         {% endfor %}
       </section>
@@ -168,6 +177,36 @@
 
     </div>{# /col-logs #}
     </div>{# /content-grid #}
+
+    {# ---- Bonus history (last 5 weeks) ---- #}
+    {% if bonus_history %}
+      <section class="card" id="history-card">
+        <h2>Recent weeks</h2>
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Week</th>
+              <th>Reading</th>
+              <th>Outdoor</th>
+              <th>Bonus</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in bonus_history %}
+              <tr class="{% if h.earned %}hist-earned{% else %}hist-missed{% endif %}">
+                <td>{{ h.label }}</td>
+                <td>{{ h.reading }}/{{ h.reading_target }} min</td>
+                <td>{{ h.outdoor_hm }}/{{ h.outdoor_target_hm }}</td>
+                <td>{% if h.earned %}⭐{% else %}—{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if bonus_dollars is not none %}
+          <div class="history-total">Total earned: ${{ "%.2f"|format(total_earned) }}</div>
+        {% endif %}
+      </section>
+    {% endif %}
 
   {% endif %}{# end in-program #}
 </div>

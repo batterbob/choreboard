@@ -1,5 +1,5 @@
-/* Chore Tracker — kid page. Mobile-first, tuned for Safari iOS 15 on old iPads.
-   No CSS features newer than iOS 15 (no :has, no container queries, no subgrid). */
+/* Family Tracker — kid page. Mobile-first. Avoids newer CSS features
+   (no :has, no container queries, no subgrid) for broad browser compatibility. */
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
@@ -64,6 +64,7 @@ html, body {
 .stars { font-size: 22px; letter-spacing: 2px; }
 .stars-label { display: block; color: var(--muted); font-size: 15px; margin-top: 2px; }
 .streak { display: inline-block; margin-top: 4px; font-weight: 600; }
+.allowance-earned { display: block; margin-top: 4px; font-size: 15px; color: var(--green); font-weight: 600; }
 .reward-line { text-align: center; color: var(--muted); margin-bottom: 8px; }
 
 /* ---- Banners ---- */
@@ -132,6 +133,7 @@ html, body {
 .check-row.checked .checkbox { background: var(--green); border-color: var(--green); }
 .check-row.locked { opacity: 0.95; cursor: default; }
 .check-label { flex: 1; }
+.chore-notes { display: block; font-size: 14px; color: var(--muted); margin-top: 2px; }
 
 .weekly-hint { color: var(--muted); font-size: 15px; margin: -4px 0 10px; }
 
@@ -150,6 +152,18 @@ html, body {
   font-weight: 700;
   color: var(--green);
   padding: 18px 8px;
+  -webkit-animation: celebrate .5s ease;
+  animation: celebrate .5s ease;
+}
+@-webkit-keyframes celebrate {
+  0%   { -webkit-transform: scale(0.8); opacity: 0; }
+  60%  { -webkit-transform: scale(1.08); }
+  100% { -webkit-transform: scale(1);   opacity: 1; }
+}
+@keyframes celebrate {
+  0%   { transform: scale(0.8); opacity: 0; }
+  60%  { transform: scale(1.08); }
+  100% { transform: scale(1);   opacity: 1; }
 }
 
 /* ---- Log sections ---- */
@@ -453,6 +467,25 @@ html, body {
 .mini-btn.off { background: #eef1f5; color: var(--muted); }
 .mini-btn.danger { background: var(--red-bg); color: var(--red); border-color: var(--red); }
 .mini-btn.mini-btn-sm { font-size: 12px; padding: 4px 8px; }
+
+/* ---- Bonus history table (kid page) ---- */
+.history-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.history-table th {
+  text-align: left;
+  color: var(--muted);
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+  padding: 4px 8px;
+}
+.history-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.hist-earned td { color: var(--green); }
+.hist-missed td { color: var(--muted); }
+.history-total { margin-top: 10px; font-size: 15px; font-weight: 600; color: var(--green); }
+
+/* ---- Admin next-steps banner list ---- */
+.setup-next-steps { text-align: left; margin: 8px 0 0 0; padding-left: 1.25rem; }
+.setup-next-steps li { margin-bottom: 4px; }
+.setup-done-banner { text-align: left; }
 
 /* ---- Undo toast ---- */
 .toast {

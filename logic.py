@@ -384,7 +384,7 @@ def weekly_chores_for_kid(conn, kid_id, d):
     paused_ids = paused_chore_ids_on(conn, d)
     chores = conn.execute(
         "SELECT * FROM chores WHERE type='weekly' AND active=1 ORDER BY id").fetchall()
-    return [{"id": c["id"], "name": c["name"],
+    return [{"id": c["id"], "name": c["name"], "notes": c["notes"] or "",
              "done": weekly_done(conn, kid_id, c["id"], d)}
             for c in chores
             if c["id"] not in paused_ids and chore_assigned_to(conn, c, kid_id, ws)]
@@ -454,7 +454,7 @@ def scheduled_for_kid(conn, kid_id, d):
             continue
         st = scheduled_state(conn, kid_id, ch, d)
         if st["state"] in ("countdown", "due_today", "overdue", "done"):
-            out.append({"id": ch["id"], "name": ch["name"],
+            out.append({"id": ch["id"], "name": ch["name"], "notes": ch["notes"] or "",
                         "done": st["state"] == "done", **st})
     return out
 
@@ -545,7 +545,7 @@ def ensure_rotation_for_week(conn, d):
     """Auto-advance rotating-chore assignments up to the current week.
 
     Backfills every week from the last week that has assignments through this
-    one, swapping the two kids each week (Andrew <-> Daniel). Idempotent: weeks
+    one, swapping the two kids each week in alternating order. Idempotent: weeks
     that already have rows are skipped. Seed creates week 1, so normal operation
     just adds the current week on the first Monday load.
     """
@@ -769,6 +769,17 @@ def makeup_banner(conn, kid_id, d):
 # --------------------------------------------------------------------------- #
 # Summer scoreboard (v1.1 D)
 # --------------------------------------------------------------------------- #
+def kid_bonus_history(conn, kid_id, n=5):
+    """Last n finalized non-paused weeks for the kid's history section."""
+    rows = conn.execute(
+        "SELECT week_start_date, bonus_earned, reading_minutes, outdoor_minutes, "
+        "reading_target, outdoor_target FROM weekly_results "
+        "WHERE kid_id=? AND is_paused_week=0 "
+        "ORDER BY week_start_date DESC LIMIT ?",
+        (kid_id, n)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def scoreboard(conn, kid_id):
     """(stars, streak). Paused weeks are skipped — neither earn nor break."""
     rows = conn.execute(

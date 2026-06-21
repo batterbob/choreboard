@@ -83,6 +83,17 @@
     </nav>
   </header>
 
+  {% if setup_done %}
+    <div class="banner banner-green setup-done-banner">
+      <div class="banner-big">✅ Setup complete! Here's what to do next:</div>
+      <ul class="setup-next-steps">
+        <li>Share each kid's link so they can check off chores — links are in the nav above.</li>
+        <li>Go to <a href="/admin/settings">Settings</a> to configure notifications, special periods, and more.</li>
+        <li>Use the <strong>Assignments &amp; overrides</strong> section below to mark chores done or assign extras.</li>
+      </ul>
+    </div>
+  {% endif %}
+
   {% if not in_program %}
     <div class="banner banner-break">
       <div class="banner-big">{{ app_name }} isn't running right now ☀️</div>
@@ -184,6 +195,10 @@
                 <button class="mini-btn">✓ {{ ch.name }}</button>
               </form>
             {% endfor %}
+            <form method="post" action="/admin/kid/{{ c.id }}/complete-all" class="row-form" style="margin-top:.5rem">
+              {{ today_field() }}
+              <button class="mini-btn primary">✓ Mark all done</button>
+            </form>
           {% else %}
             <div class="status-line status-good">All daily chores done ✓</div>
           {% endif %}
@@ -306,6 +321,7 @@
   {# ---- Rotating chore manager ---- #}
   <h2 class="admin-section-h">Rotating chores</h2>
   <section class="card">
+    <div class="set-hint" style="margin-bottom:.75rem">Rotating chores automatically swap between kids each week — one kid does it this week, the other does it next week. Use <strong>Swap</strong> to override who does it this week.</div>
     <table class="chore-table">
       <tr><th>Chore</th><th>This week</th><th></th></tr>
       {% for r in rotation %}

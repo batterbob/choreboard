@@ -1,7 +1,6 @@
-"""Chore Tracker — Flask entrypoint.
+"""Family Tracker — Flask entrypoint.
 
 Single-process (no gunicorn workers) so background scheduling fires once.
-Kid pages and APIs only for this milestone; /status and /admin come next.
 """
 import os
 import re
@@ -68,7 +67,7 @@ def effective_today():
 
 @app.after_request
 def _no_store(resp):
-    """iOS Safari caches aggressively; force fresh totals on kid/status pages."""
+    """Mobile Safari caches aggressively; force fresh totals on kid/status pages."""
     p = request.path
     if (p == "/status" or p == "/healthz" or p.rstrip("/") in _KID_PATHS
             or p.startswith("/api/") or p.startswith("/admin")):
@@ -186,8 +185,8 @@ def kid_view(conn, kid, d):
 
     daily = logic.assigned_daily_chores(conn, kid["id"], d)
     done_map = logic.completed_chore_ids(conn, kid["id"], d)
-    daily_rows = [{"id": c["id"], "name": c["name"], "done": c["id"] in done_map,
-                   "kind": c["type"],
+    daily_rows = [{"id": c["id"], "name": c["name"], "notes": c["notes"] or "",
+                   "done": c["id"] in done_map, "kind": c["type"],
                    "overdue": (c["type"] == "alternate_daily"
                                and logic.alt_daily_is_overdue(c, d))}
                   for c in daily]
@@ -202,6 +201,32 @@ def kid_view(conn, kid, d):
 
     stars, streak = logic.scoreboard(conn, kid["id"])
     reward = logic.get_setting(conn, "scoreboard_reward_text", "") or ""
+
+    # Bonus history (last 5 finalized weeks)
+    bonus_history = []
+    for row in logic.kid_bonus_history(conn, kid["id"]):
+        ws_h = logic.s2d(row["week_start_date"])
+        we_h = logic.week_end(ws_h)
+        label_h = ws_h.strftime("%b ") + str(ws_h.day) + "–" + str(we_h.day)
+        bonus_history.append({
+            "label": label_h,
+            "earned": row["bonus_earned"] == 1,
+            "reading": row["reading_minutes"],
+            "reading_target": row["reading_target"],
+            "outdoor_hm": _fmt_hm(row["outdoor_minutes"]),
+            "outdoor_target_hm": _fmt_hm(row["outdoor_target"]),
+        })
+
+    # Allowance
+    bonus_dollars_str = logic.get_setting(conn, "bonus_dollar_amount", "") or ""
+    bonus_dollars = None
+    total_earned = None
+    if bonus_dollars_str:
+        try:
+            bonus_dollars = float(bonus_dollars_str)
+            total_earned = bonus_dollars * stars
+        except ValueError:
+            pass
 
     debug = os.environ.get("CHORE_DEBUG", "0") in ("1", "true", "True")
     return {
@@ -224,6 +249,9 @@ def kid_view(conn, kid, d):
         "reward": reward,
         "makeup": logic.makeup_banner(conn, kid["id"], d),
         "last_week_bonus": logic.last_week_bonus(conn, kid["id"], d),
+        "bonus_history": bonus_history,
+        "bonus_dollars": bonus_dollars,
+        "total_earned": total_earned,
         "reading_quick": [15, 25, 30, 60],
         "outdoor_quick": [15, 30, 60, 90],
     }
@@ -331,6 +359,7 @@ def admin_view(conn, d):
         "as_needed_chores": [dict(r) for r in as_needed_chores],
         "rotation": logic.rotation_table(conn, d),
         "debug_today": logic.d2s(d) if debug else None,
+        "setup_done": request.args.get("setup_done"),
     }
 
 
@@ -386,6 +415,7 @@ def settings_view(conn):
         "program_start": g("program_start_date", ""),
         "program_end": g("program_end_date", ""),
         "reward": g("scoreboard_reward_text", ""),
+        "bonus_dollar_amount": g("bonus_dollar_amount", ""),
         "notify_service": g("notify_service", "none"),
         "notify_pushover_app_token": g("notify_pushover_app_token", ""),
         "notify_pushover_user_key": g("notify_pushover_user_key", ""),
@@ -578,11 +608,12 @@ def admin_chore_add():
     if name and ctype in ("daily", "weekly", "as_needed", "scheduled", "alternate_daily"):
         wd, lead, label = _schedule_fields(ctype)
         parity = _alt_daily_fields(ctype)
+        notes = (request.form.get("notes") or "").strip()
         conn.execute(
             "INSERT INTO chores (name, type, is_rotating, active, deleted, "
-            "created_at, due_weekday, reminder_lead_days, due_label, alt_day_parity) "
-            "VALUES (?,?,0,1,0,?,?,?,?,?)",
-            (name, ctype, logic.now_iso(), wd, lead, label, parity))
+            "created_at, due_weekday, reminder_lead_days, due_label, alt_day_parity, notes) "
+            "VALUES (?,?,0,1,0,?,?,?,?,?,?)",
+            (name, ctype, logic.now_iso(), wd, lead, label, parity, notes or None))
         conn.commit()
     return _admin_redirect()
 
@@ -602,10 +633,11 @@ def admin_chore_edit():
         rot = cur["is_rotating"] if cur else 0
         wd, lead, label = _schedule_fields(ctype)
         parity = _alt_daily_fields(ctype)
+        notes = (request.form.get("notes") or "").strip()
         conn.execute(
             "UPDATE chores SET name=?, type=?, is_rotating=?, due_weekday=?, "
-            "reminder_lead_days=?, due_label=?, alt_day_parity=? WHERE id=? AND deleted=0",
-            (name, ctype, rot, wd, lead, label, parity, chore_id))
+            "reminder_lead_days=?, due_label=?, alt_day_parity=?, notes=? WHERE id=? AND deleted=0",
+            (name, ctype, rot, wd, lead, label, parity, notes or None, chore_id))
         conn.commit()
     return _admin_redirect()
 
@@ -626,6 +658,26 @@ def admin_chore_delete():
     conn = get_db()
     conn.execute("UPDATE chores SET deleted=1, active=0 WHERE id=?",
                  (request.form.get("chore_id"),))
+    conn.commit()
+    return _admin_redirect()
+
+
+@app.route("/admin/kid/<int:kid_id>/complete-all", methods=["POST"])
+@require_admin
+def admin_complete_all(kid_id):
+    """Mark every incomplete daily chore done for a kid today (parent-verified)."""
+    conn = get_db()
+    d = effective_today()
+    kid = conn.execute("SELECT * FROM kids WHERE id=? AND active=1", (kid_id,)).fetchone()
+    if kid is None:
+        abort(404)
+    done_map = logic.completed_chore_ids(conn, kid_id, d)
+    for c in logic.assigned_daily_chores(conn, kid_id, d):
+        if c["id"] not in done_map:
+            conn.execute(
+                "INSERT OR IGNORE INTO chore_completions (kid_id, chore_id, "
+                "completion_date, completed_at, parent_verified) VALUES (?,?,?,?,1)",
+                (kid_id, c["id"], logic.d2s(d), logic.now_iso()))
     conn.commit()
     return _admin_redirect()
 
@@ -872,6 +924,8 @@ def admin_settings_general():
             logic.set_setting(conn, key, val)
     logic.set_setting(conn, "scoreboard_reward_text",
                       (request.form.get("reward") or "").strip())
+    logic.set_setting(conn, "bonus_dollar_amount",
+                      (request.form.get("bonus_dollar_amount") or "").strip())
     conn.commit()
     return redirect("/admin/settings?saved=1")
 
@@ -1324,7 +1378,7 @@ def setup_wizard():
         logic.set_setting(conn, "setup_complete", "1")
         conn.commit()
         session["admin"] = True
-        return redirect("/admin")
+        return redirect("/admin?setup_done=1")
     common_tz = [
         "America/New_York", "America/Chicago", "America/Denver",
         "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu",

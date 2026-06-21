@@ -11,6 +11,14 @@ data/
 .env
 *.env
 
+# Dev server output files
+app_out.txt
+app_err.txt
+
+# Personal development docs
+2026-*
+docs/screenshots/test_screen.png
+
 # OS
 .DS_Store
 Thumbs.db

@@ -1,7 +1,6 @@
 """Background scheduler — the only part of the app that acts on its own clock.
 
-Two time-of-day Pushover notifications that must fire whether or not anyone has
-a page open:
+Sends time-of-day notifications that fire whether or not anyone has a page open:
   * mid-morning reminder (default 10:00) if a kid's checklist isn't done
   * Sunday 7pm household week summary
 
@@ -11,7 +10,7 @@ Runs in the single Flask process — never start more than one.
 """
 import logging
 import os
-from datetime import time
+from datetime import time, timedelta
 
 import requests
 
@@ -85,6 +84,19 @@ def maybe_sunday_summary(conn, now, d):
                      build_summary(conn, d), d)
 
 
+def maybe_monday_recap(conn, now, d):
+    """Monday morning: fire a recap of last week's results (once)."""
+    if d.weekday() != 0 or now.hour < 8:   # Monday only, after 8am
+        return
+    if logic.is_paused(conn, d):
+        return
+    last_sunday = d - timedelta(days=1)
+    app_name = logic.get_setting(conn, "app_name", "Family Tracker")
+    notify.send_once(conn, HOUSEHOLD, "monday_recap",
+                     "%s — Last Week" % app_name,
+                     build_summary(conn, last_sunday), d)
+
+
 def maybe_scheduled_due(conn, now, d):
     """On a scheduled chore's due evening, Pushover once if it isn't done yet."""
     if now.hour < 17:                            # give them the day; nudge in the evening
@@ -108,26 +120,26 @@ def maybe_scheduled_due(conn, now, d):
 
 
 def heartbeat(env=None):
-    """Ping an Uptime Kuma push monitor if UPTIME_KUMA_PUSH_URL is set.
+    """Ping a push-monitor URL if HEALTHCHECK_URL is set.
 
     Because this runs from the scheduler tick, a received heartbeat proves the
-    background job is alive — not just that the web server answers. Fire-and-
-    forget: a failure is logged, never raised.
+    background job is alive — not just that the web server answers. Works with
+    any HTTP push monitor (Uptime Kuma, Healthchecks.io, etc.). Fire-and-forget:
+    a failure is logged, never raised.
     """
     env = env if env is not None else os.environ
-    url = (env.get("UPTIME_KUMA_PUSH_URL") or "").strip()
+    url = (env.get("HEALTHCHECK_URL") or "").strip()
     if not url:
         return False
-    # If the configured URL already has a query string (Kuma's push URL ships
-    # with ?status=up&msg=OK&ping=), use it as-is. Appending our own would
-    # duplicate `status`, which Kuma parses as a list and reads as DOWN.
+    # If the URL already has a query string (some monitors ship with
+    # ?status=up&msg=OK), use it as-is to avoid duplicating parameters.
     if "?" not in url:
         url = url + "?status=up&msg=OK"
     try:
         requests.get(url, timeout=5)
         return True
     except Exception as exc:  # noqa: BLE001 - heartbeat is best-effort
-        log.warning("Uptime Kuma heartbeat failed: %s", exc)
+        log.warning("Heartbeat ping failed: %s", exc)
         return False
 
 
@@ -141,6 +153,7 @@ def run_tick(env=None):
             maybe_morning_reminder(conn, now, d)
             maybe_scheduled_due(conn, now, d)
             maybe_sunday_summary(conn, now, d)
+            maybe_monday_recap(conn, now, d)
     finally:
         conn.close()
     heartbeat(env)                              # always — proves the tick ran

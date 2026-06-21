@@ -24,7 +24,7 @@
         </label>
       </div>
       <div class="set-row">
-        <label>Program label <span class="set-hint">(shown as section headings)</span>
+        <label>Program label <span class="set-hint">(the activity period name, e.g. "Summer Camp" or "School Year" — used in notifications)</span>
           <input type="text" name="program_label" value="Activity Tracker" class="set-text wide">
         </label>
       </div>
@@ -53,12 +53,13 @@
       {% for i in [1, 2, 3, 4] %}
         <div class="set-row">
           <label>Kid {{ i }} name
-            <input type="text" name="kid{{ i }}_name" class="add-name" placeholder="e.g. Alex{% if i == 2 %}, Jordan{% endif %}">
+            <input type="text" name="kid{{ i }}_name" id="kid{{ i }}-name" class="add-name"
+                   placeholder="e.g. Alex{% if i == 2 %}, Jordan{% endif %}"
+                   oninput="autoSlug(this,'kid{{ i }}-slug')">
           </label>
           <label>URL slug
-            <input type="text" name="kid{{ i }}_slug" class="set-text"
-                   placeholder="e.g. alex{% if i == 2 %}, jordan{% endif %}"
-                   pattern="[a-z0-9_-]*">
+            <input type="text" name="kid{{ i }}_slug" id="kid{{ i }}-slug" class="set-text"
+                   placeholder="auto-filled" pattern="[a-z0-9_-]*">
           </label>
         </div>
       {% endfor %}
@@ -71,5 +72,18 @@
   </section>
 
 </div>
+<script>
+function autoSlug(nameInput, slugId) {
+  var slugEl = document.getElementById(slugId);
+  if (!slugEl || slugEl.dataset.userEdited) { return; }
+  slugEl.value = nameInput.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+}
+document.addEventListener('DOMContentLoaded', function() {
+  [1,2,3,4].forEach(function(i) {
+    var el = document.getElementById('kid' + i + '-slug');
+    if (el) { el.addEventListener('input', function() { el.dataset.userEdited = '1'; }); }
+  });
+});
+</script>
 </body>
 </html>

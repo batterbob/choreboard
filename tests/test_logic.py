@@ -53,25 +53,25 @@ class DateMath(unittest.TestCase):
 class Proration(unittest.TestCase):
     def setUp(self):
         self.conn = fresh_db()
-        self.andrew = logic.kid_by_slug(self.conn, "andrew")
+        self.alex = logic.kid_by_slug(self.conn, "alex")
 
     def test_shoulder_week_leaving(self):
         # Week Jun29-Jul5: cruise starts Jul3 -> Jul3,4,5 paused, 4 active days.
-        t = logic.prorated_targets(self.conn, self.andrew, date(2026, 6, 29))
+        t = logic.prorated_targets(self.conn, self.alex, date(2026, 6, 29))
         self.assertEqual(t["active_days"], 4)
         self.assertEqual(t["reading"], 100)   # round(175*4/7)
         self.assertEqual(t["outdoor"], 171)   # round(300*4/7)
 
     def test_fully_paused_week(self):
         # Week Jul6-12 sits entirely inside the cruise -> 0 active days.
-        t = logic.prorated_targets(self.conn, self.andrew, date(2026, 7, 6))
+        t = logic.prorated_targets(self.conn, self.alex, date(2026, 7, 6))
         self.assertEqual(t["active_days"], 0)
         self.assertEqual(t["reading"], 0)
         self.assertEqual(t["outdoor"], 0)
 
     def test_camp_week_is_full_target(self):
         # Week Jul20-26 is all in-program, none paused -> full target.
-        t = logic.prorated_targets(self.conn, self.andrew, date(2026, 7, 20))
+        t = logic.prorated_targets(self.conn, self.alex, date(2026, 7, 20))
         self.assertEqual(t["active_days"], 7)
         self.assertEqual(t["outdoor"], 300)
 
@@ -81,7 +81,7 @@ class CampCredit(unittest.TestCase):
         self.conn = fresh_db()
 
     def test_idempotent_and_fills_week(self):
-        a = kid_id(self.conn, "andrew")
+        a = kid_id(self.conn, "alex")
         # Run twice; must not double-count.
         logic.ensure_camp_credit(self.conn, date(2026, 8, 1))
         logic.ensure_camp_credit(self.conn, date(2026, 8, 1))
@@ -94,7 +94,7 @@ class CampCredit(unittest.TestCase):
         self.assertEqual(logic.weekly_outdoor(self.conn, a, date(2026, 7, 20)), 300)
 
     def test_credit_not_granted_before_today(self):
-        a = kid_id(self.conn, "andrew")
+        a = kid_id(self.conn, "alex")
         logic.ensure_camp_credit(self.conn, date(2026, 7, 22))  # mid-camp
         n = self.conn.execute(
             "SELECT COUNT(*) c FROM outdoor_logs WHERE kid_id=? AND source='camp_auto'",
@@ -127,26 +127,26 @@ class Pace(unittest.TestCase):
 class Banner(unittest.TestCase):
     def setUp(self):
         self.conn = fresh_db()
-        self.andrew = logic.kid_by_slug(self.conn, "andrew")
+        self.alex = logic.kid_by_slug(self.conn, "alex")
 
     def test_out_of_program(self):
-        b = logic.banner_state(self.conn, self.andrew, date(2026, 6, 19))
+        b = logic.banner_state(self.conn, self.alex, date(2026, 6, 19))
         self.assertEqual(b["state"], "out_of_program")
 
     def test_on_break(self):
-        b = logic.banner_state(self.conn, self.andrew, date(2026, 7, 8))
+        b = logic.banner_state(self.conn, self.alex, date(2026, 7, 8))
         self.assertEqual(b["state"], "on_break")
 
     def test_monday_empty_is_green(self):
         # Monday with nothing logged -> on track (full week ahead).
-        b = logic.banner_state(self.conn, self.andrew, date(2026, 6, 22))
+        b = logic.banner_state(self.conn, self.alex, date(2026, 6, 22))
         self.assertEqual(b["state"], "on_track")
 
 
 class MakeupMonday(unittest.TestCase):
     def setUp(self):
         self.conn = fresh_db()
-        self.a = kid_id(self.conn, "andrew")
+        self.a = kid_id(self.conn, "alex")
 
     def test_miss_creates_deficit_then_reinstates(self):
         # Week 1 (Jun22-28): log below target so it finalizes as a miss.
@@ -189,7 +189,7 @@ class MakeupMonday(unittest.TestCase):
 class Scoreboard(unittest.TestCase):
     def setUp(self):
         self.conn = fresh_db()
-        self.a = kid_id(self.conn, "andrew")
+        self.a = kid_id(self.conn, "alex")
 
     def test_paused_week_does_not_break_streak(self):
         rows = [
@@ -213,7 +213,7 @@ class Scoreboard(unittest.TestCase):
 class WeeklyChores(unittest.TestCase):
     def setUp(self):
         self.conn = fresh_db()
-        self.a = kid_id(self.conn, "andrew")
+        self.a = kid_id(self.conn, "alex")
         self.chore = self.conn.execute(
             "SELECT id FROM chores WHERE name='Clean your room'").fetchone()["id"]
 
@@ -259,7 +259,7 @@ class AdminAuth(unittest.TestCase):
 class ChecklistDays(unittest.TestCase):
     def setUp(self):
         self.conn = fresh_db()
-        self.a = kid_id(self.conn, "andrew")
+        self.a = kid_id(self.conn, "alex")
 
     def test_days_completed_vs_elapsed(self):
         complete_checklist(self.conn, self.a, date(2026, 6, 22))  # Mon
@@ -279,8 +279,8 @@ class ChecklistDays(unittest.TestCase):
 class Rotation(unittest.TestCase):
     def setUp(self):
         self.conn = fresh_db()
-        self.andrew = kid_id(self.conn, "andrew")
-        self.daniel = kid_id(self.conn, "daniel")
+        self.alex = kid_id(self.conn, "alex")
+        self.jordan = kid_id(self.conn, "jordan")
         self.trash = self.conn.execute(
             "SELECT id FROM chores WHERE name='Take indoor trash to outdoor bins'"
         ).fetchone()["id"]
@@ -292,21 +292,21 @@ class Rotation(unittest.TestCase):
         return row["kid_id"] if row else None
 
     def test_seed_week1(self):
-        self.assertEqual(self._holder(self.trash, "2026-06-22"), self.andrew)
+        self.assertEqual(self._holder(self.trash, "2026-06-22"), self.alex)
 
     def test_auto_swap_next_week(self):
         logic.ensure_rotation_for_week(self.conn, date(2026, 6, 29))
-        self.assertEqual(self._holder(self.trash, "2026-06-29"), self.daniel)
+        self.assertEqual(self._holder(self.trash, "2026-06-29"), self.jordan)
 
     def test_backfill_alternates(self):
         # Jump several weeks; intermediate weeks must be backfilled, alternating.
         logic.ensure_rotation_for_week(self.conn, date(2026, 7, 13))
-        self.assertEqual(self._holder(self.trash, "2026-07-06"), self.andrew)
-        self.assertEqual(self._holder(self.trash, "2026-07-13"), self.daniel)
+        self.assertEqual(self._holder(self.trash, "2026-07-06"), self.alex)
+        self.assertEqual(self._holder(self.trash, "2026-07-13"), self.jordan)
 
     def test_manual_swap(self):
         logic.swap_rotation_this_week(self.conn, date(2026, 6, 24))  # week of 06-22
-        self.assertEqual(self._holder(self.trash, "2026-06-22"), self.daniel)
+        self.assertEqual(self._holder(self.trash, "2026-06-22"), self.jordan)
 
 
 def complete_chore(conn, kid, chore_id, dstr):
@@ -320,7 +320,7 @@ def complete_chore(conn, kid, chore_id, dstr):
 class ScheduledChores(unittest.TestCase):
     def setUp(self):
         self.conn = fresh_db()
-        self.d = kid_id(self.conn, "daniel")   # bins rotate to Daniel in week 1
+        self.d = kid_id(self.conn, "jordan")   # bins rotate to Jordan in week 1
         # Pin creation well before the test dates so overdue logic is deterministic.
         self.conn.execute("UPDATE chores SET created_at='2026-06-01T00:00:00' "
                           "WHERE name='Put bins out at curb'")
@@ -373,8 +373,8 @@ class ScheduledChores(unittest.TestCase):
     def test_for_kid_shows_for_assigned_only(self):
         rows = logic.scheduled_for_kid(self.conn, self.d, date(2026, 6, 24))
         self.assertEqual([r["name"] for r in rows], ["Put bins out at curb"])
-        andrew = kid_id(self.conn, "andrew")
-        self.assertEqual(logic.scheduled_for_kid(self.conn, andrew, date(2026, 6, 24)), [])
+        alex = kid_id(self.conn, "alex")
+        self.assertEqual(logic.scheduled_for_kid(self.conn, alex, date(2026, 6, 24)), [])
 
     def test_migration_converts_existing_bins(self):
         # Simulate an old-style row, then run the migration.
@@ -392,8 +392,8 @@ class ScheduledChores(unittest.TestCase):
 class Assignment(unittest.TestCase):
     def setUp(self):
         self.conn = fresh_db()
-        self.a = kid_id(self.conn, "andrew")
-        self.dn = kid_id(self.conn, "daniel")
+        self.a = kid_id(self.conn, "alex")
+        self.dn = kid_id(self.conn, "jordan")
         self.dish = self.conn.execute(
             "SELECT id FROM chores WHERE name='Empty the dishwasher'").fetchone()["id"]
 
@@ -407,7 +407,7 @@ class Assignment(unittest.TestCase):
         self.conn.commit()
         self.assertEqual(len(logic.assigned_daily_chores(self.conn, self.dn, date(2026, 6, 24))), 2)
         self.assertEqual(len(logic.assigned_daily_chores(self.conn, self.a, date(2026, 6, 24))), 3)
-        # Daniel's checklist is now just his 2 chores.
+        # Jordan's checklist is now just his 2 chores.
         for ch in logic.assigned_daily_chores(self.conn, self.dn, date(2026, 6, 24)):
             complete_chore(self.conn, self.dn, ch["id"], "2026-06-24")
         done, _ = logic.checklist_status(self.conn, self.dn, date(2026, 6, 24))
@@ -438,7 +438,7 @@ class Assignment(unittest.TestCase):
 class Scheduler(unittest.TestCase):
     def setUp(self):
         self.conn = fresh_db()
-        self.a = kid_id(self.conn, "andrew")
+        self.a = kid_id(self.conn, "alex")
         self.conn.execute("UPDATE chores SET created_at='2026-06-01T00:00:00' "
                           "WHERE name='Put bins out at curb'")
         self.conn.commit()
@@ -466,11 +466,11 @@ class Scheduler(unittest.TestCase):
         complete_checklist(self.conn, self.a, d)
         now = datetime(2026, 6, 24, 10, 30, tzinfo=NY)
         scheduler.maybe_morning_reminder(self.conn, now, d)
-        # Andrew done -> only Daniel gets reminded.
+        # Alex done -> only Jordan gets reminded.
         rows = self.conn.execute(
             "SELECT kid_id FROM notifications_sent WHERE notification_type='morning_reminder'"
         ).fetchall()
-        self.assertEqual([r["kid_id"] for r in rows], [kid_id(self.conn, "daniel")])
+        self.assertEqual([r["kid_id"] for r in rows], [kid_id(self.conn, "jordan")])
 
     def test_reminder_off_disables(self):
         logic.set_setting(self.conn, "reminder_time", "off")
@@ -497,22 +497,22 @@ class Scheduler(unittest.TestCase):
 
     def test_summary_message_format(self):
         msg = scheduler.build_summary(self.conn, date(2026, 6, 28))
-        self.assertIn("Andrew: Reading 0/175 min ✗, Outdoor 0/5 hr ✗", msg)
-        self.assertIn("Daniel:", msg)
+        self.assertIn("Alex: Reading 0/175 min ✗, Outdoor 0/5 hr ✗", msg)
+        self.assertIn("Jordan:", msg)
 
     def test_heartbeat_noop_without_url(self):
-        # No UPTIME_KUMA_PUSH_URL configured -> no-op, no network, no raise.
+        # No HEALTHCHECK_URL configured -> no-op, no network, no raise.
         self.assertFalse(scheduler.heartbeat({}))
 
     def test_scheduled_due_fires_once_in_evening(self):
-        d = date(2026, 6, 22)  # Monday; bins assigned to Daniel this week
+        d = date(2026, 6, 22)  # Monday; bins assigned to Jordan this week
         evening = datetime(2026, 6, 22, 19, 0, tzinfo=NY)
         scheduler.maybe_scheduled_due(self.conn, evening, d)
         scheduler.maybe_scheduled_due(self.conn, evening, d)  # dedup
         n = self.conn.execute(
             "SELECT COUNT(*) n FROM notifications_sent "
             "WHERE notification_type LIKE 'scheduled_due:%'").fetchone()["n"]
-        self.assertEqual(n, 1)   # Daniel only, once
+        self.assertEqual(n, 1)   # Jordan only, once
 
     def test_scheduled_due_silent_before_evening(self):
         scheduler.maybe_scheduled_due(self.conn, datetime(2026, 6, 22, 12, 0, tzinfo=NY),
@@ -525,3 +525,5 @@ class Scheduler(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
