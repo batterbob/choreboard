@@ -64,8 +64,9 @@
       <div class="banner banner-makeup" id="makeup-banner">
         <div class="banner-big">Bonus locked — earn it back today!</div>
         <ul class="makeup-list">
-          {% if makeup.reading_left > 0 %}<li>Read {{ makeup.reading_left }} more min</li>{% endif %}
-          {% if makeup.outdoor_left > 0 %}<li>Get {{ makeup.outdoor_left }} more outdoor min</li>{% endif %}
+          {% for it in makeup.items %}
+            <li>{{ it.left }}{% if it.unit == 'minutes' %} more min of{% endif %} {{ it.label }}</li>
+          {% endfor %}
           <li>Finish your checklist</li>
         </ul>
       </div>
@@ -166,17 +167,10 @@
     </div>{# /col-chores #}
     <div class="col col-logs">
 
-    {# ---- Reading log ---- #}
-    {% if reading_enabled %}
-    {% set s = reading %}
-    {% include "_log_section.html" %}
-    {% endif %}
-
-    {# ---- Outdoor log ---- #}
-    {% if outdoor_enabled %}
-    {% set s = outdoor %}
-    {% include "_log_section.html" %}
-    {% endif %}
+    {# ---- Activity logs (one section per enabled activity) ---- #}
+    {% for s in activity_sections %}
+      {% include "_log_section.html" %}
+    {% endfor %}
 
     </div>{# /col-logs #}
     </div>{# /content-grid #}
@@ -189,8 +183,7 @@
           <thead>
             <tr>
               <th>Week</th>
-              {% if reading_enabled %}<th>{{ reading_label }}</th>{% endif %}
-              {% if outdoor_enabled %}<th>{{ outdoor_label }}</th>{% endif %}
+              {% for col in bonus_history[0].cols %}<th>{{ col.label }}</th>{% endfor %}
               <th>Bonus</th>
             </tr>
           </thead>
@@ -198,8 +191,7 @@
             {% for h in bonus_history %}
               <tr class="{% if h.earned %}hist-earned{% else %}hist-missed{% endif %}">
                 <td>{{ h.label }}</td>
-                {% if reading_enabled %}<td>{{ h.reading }}/{{ h.reading_target }} min</td>{% endif %}
-                {% if outdoor_enabled %}<td>{{ h.outdoor_hm }}/{{ h.outdoor_target_hm }}</td>{% endif %}
+                {% for col in h.cols %}<td>{{ col.cell }}</td>{% endfor %}
                 <td>{% if h.earned %}⭐{% else %}—{% endif %}</td>
               </tr>
             {% endfor %}
@@ -227,6 +219,6 @@
   };
 </script>
 <script src="/static/confetti.min.js"></script>
-<script src="/static/kid.js?v=3"></script>
+<script src="/static/kid.js?v=4"></script>
 </body>
 </html>

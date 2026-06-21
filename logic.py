@@ -129,16 +129,78 @@ def paused_chore_ids_on(conn, d):
     return {r["chore_id"] for r in rows}
 
 
-def activity_required_days_in_week(conn, ws, col):
-    """Active days in week ws where activity col ('pause_reading'/'pause_outdoor') is NOT paused."""
+# --------------------------------------------------------------------------- #
+# Activities (generic, v2) — registry + per-activity logs and targets
+# --------------------------------------------------------------------------- #
+def activities(conn, enabled_only=True):
+    """Activity rows ordered for display. Pass enabled_only=False for admin lists."""
+    sql = "SELECT * FROM activities"
+    if enabled_only:
+        sql += " WHERE enabled=1"
+    sql += " ORDER BY sort_order, id"
+    return conn.execute(sql).fetchall()
+
+
+def activity_by_key(conn, key):
+    return conn.execute("SELECT * FROM activities WHERE key=?", (key,)).fetchone()
+
+
+def activity_by_id(conn, activity_id):
+    return conn.execute("SELECT * FROM activities WHERE id=?", (activity_id,)).fetchone()
+
+
+def activity_target(conn, activity, kid_id):
+    """Per-kid weekly target, falling back to the activity's default."""
+    row = conn.execute(
+        "SELECT target FROM activity_targets WHERE activity_id=? AND kid_id=?",
+        (activity["id"], kid_id)).fetchone()
+    return row["target"] if row else activity["default_target"]
+
+
+def set_activity_target(conn, activity_id, kid_id, target):
+    conn.execute(
+        "INSERT INTO activity_targets (activity_id, kid_id, target) VALUES (?,?,?) "
+        "ON CONFLICT(activity_id, kid_id) DO UPDATE SET target=excluded.target",
+        (activity_id, kid_id, target))
+
+
+def weekly_activity_total(conn, activity_id, kid_id, ws):
+    we = week_end(ws)
+    row = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS m FROM activity_logs "
+        "WHERE activity_id=? AND kid_id=? AND log_date >= ? AND log_date <= ?",
+        (activity_id, kid_id, d2s(ws), d2s(we))).fetchone()
+    return row["m"]
+
+
+def today_activity_total(conn, activity_id, kid_id, d):
+    row = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS m FROM activity_logs "
+        "WHERE activity_id=? AND kid_id=? AND log_date=?",
+        (activity_id, kid_id, d2s(d))).fetchone()
+    return row["m"]
+
+
+def today_activity_entries(conn, activity_id, kid_id, d):
+    """Manual entries for the current day, for the kid's one-tap ✕ remove."""
+    return conn.execute(
+        "SELECT id, amount FROM activity_logs WHERE activity_id=? AND kid_id=? "
+        "AND log_date=? AND source='manual' ORDER BY id",
+        (activity_id, kid_id, d2s(d))).fetchall()
+
+
+def activity_required_days_in_week(conn, ws, activity_id):
+    """Active days in week ws where this activity is NOT paused by a special period."""
     count = 0
     for d in week_dates(ws):
         if not is_active_day(conn, d):
             continue
         s = d2s(d)
         hit = conn.execute(
-            "SELECT 1 FROM special_periods WHERE %s=1 "
-            "AND start_date <= ? AND end_date >= ? LIMIT 1" % col, (s, s)).fetchone()
+            "SELECT 1 FROM special_period_paused_activities spa "
+            "JOIN special_periods sp ON sp.id = spa.special_period_id "
+            "WHERE spa.activity_id=? AND sp.start_date <= ? AND sp.end_date >= ? LIMIT 1",
+            (activity_id, s, s)).fetchone()
         if hit is None:
             count += 1
     return count
@@ -157,14 +219,20 @@ def active_days_in_week(conn, ws):
 # Camp outdoor auto-credit (v1.1 A, outdoor_credit) — idempotent.
 # --------------------------------------------------------------------------- #
 def ensure_camp_credit(conn, upto):
-    """Insert one synthetic outdoor log per kid per camp WEEKDAY, up to `upto`.
+    """Insert one synthetic credit log per kid per camp WEEKDAY, up to `upto`.
 
-    Idempotent: a (kid, log_date, source='camp_auto') row is inserted at most
-    once, so re-running on every page load never double-counts.
+    Each 'outdoor_credit' period credits its `credit_activity_id` (defaults to the
+    outdoor activity). Idempotent: a (kid, activity, log_date, source='credit_auto')
+    row is inserted at most once, so re-running on every page load never double-counts.
     """
     kids = active_kids(conn)
+    outdoor = activity_by_key(conn, "outdoor")
+    default_aid = outdoor["id"] if outdoor else None
     for period in special_periods(conn, "outdoor_credit"):
-        minutes = period["outdoor_minutes_per_day"] or 0
+        aid = period["credit_activity_id"] or default_aid
+        if aid is None:
+            continue
+        amount = period["outdoor_minutes_per_day"] or 0
         d = s2d(period["start_date"])
         end = s2d(period["end_date"])
         while d <= end and d <= upto:
@@ -173,13 +241,14 @@ def ensure_camp_credit(conn, upto):
                 ds = d2s(d)
                 for kid in kids:
                     exists = conn.execute(
-                        "SELECT 1 FROM outdoor_logs WHERE kid_id=? AND log_date=? "
-                        "AND source='camp_auto' LIMIT 1", (kid["id"], ds)).fetchone()
+                        "SELECT 1 FROM activity_logs WHERE activity_id=? AND kid_id=? "
+                        "AND log_date=? AND source='credit_auto' LIMIT 1",
+                        (aid, kid["id"], ds)).fetchone()
                     if not exists:
                         conn.execute(
-                            "INSERT INTO outdoor_logs (kid_id, log_date, minutes, "
-                            "source, logged_at) VALUES (?,?,?, 'camp_auto', ?)",
-                            (kid["id"], ds, minutes, now_iso()))
+                            "INSERT INTO activity_logs (activity_id, kid_id, log_date, "
+                            "amount, source, logged_at) VALUES (?,?,?,?, 'credit_auto', ?)",
+                            (aid, kid["id"], ds, amount, now_iso()))
             d += timedelta(days=1)
     conn.commit()
 
@@ -190,48 +259,37 @@ def ensure_camp_credit(conn, upto):
 def prorated_targets(conn, kid, ws):
     """Targets scaled to the active days in this Mon-Sun window (v1.1 B).
 
-    Activity targets are further reduced for days where that activity is paused
-    by a special period (pause_reading / pause_outdoor flags).
+    Returns active_days/full plus a `by_activity` map {activity_id: target}.
+    Each activity's target is further reduced for days it's paused by a special
+    period. Legacy `reading`/`outdoor` keys are kept for callers that predate the
+    generic activities model.
     """
     active = active_days_in_week(conn, ws)
-    if active == 0:
-        return {"reading": 0, "outdoor": 0, "active_days": 0, "full": False}
-    r_days = activity_required_days_in_week(conn, ws, "pause_reading")
-    o_days = activity_required_days_in_week(conn, ws, "pause_outdoor")
-    r = round(kid["reading_target_minutes"] * r_days / 7)
-    o = round(kid["outdoor_target_minutes"] * o_days / 7)
-    return {"reading": r, "outdoor": o, "active_days": active, "full": active == 7}
+    full = active == 7
+    by_activity = {}
+    legacy = {"reading": 0, "outdoor": 0}
+    for a in activities(conn, enabled_only=True):
+        if active == 0:
+            t = 0
+        else:
+            days = activity_required_days_in_week(conn, ws, a["id"])
+            t = round(activity_target(conn, a, kid["id"]) * days / 7)
+        by_activity[a["id"]] = t
+        if a["key"] in legacy:
+            legacy[a["key"]] = t
+    return {"active_days": active, "full": full, "by_activity": by_activity, **legacy}
 
 
-def _sum_logs(conn, table, kid_id, ws):
-    we = week_end(ws)
-    row = conn.execute(
-        "SELECT COALESCE(SUM(minutes), 0) AS m FROM %s "
-        "WHERE kid_id=? AND log_date >= ? AND log_date <= ?" % table,
-        (kid_id, d2s(ws), d2s(we))).fetchone()
-    return row["m"]
-
-
+# Legacy compatibility wrappers — map the old reading/outdoor calls onto the
+# generic activity helpers so existing callers keep working during the migration.
 def weekly_reading(conn, kid_id, ws):
-    return _sum_logs(conn, "reading_logs", kid_id, ws)
+    a = activity_by_key(conn, "reading")
+    return weekly_activity_total(conn, a["id"], kid_id, ws) if a else 0
 
 
 def weekly_outdoor(conn, kid_id, ws):
-    return _sum_logs(conn, "outdoor_logs", kid_id, ws)
-
-
-def today_minutes(conn, table, kid_id, d):
-    row = conn.execute(
-        "SELECT COALESCE(SUM(minutes), 0) AS m FROM %s "
-        "WHERE kid_id=? AND log_date=?" % table, (kid_id, d2s(d))).fetchone()
-    return row["m"]
-
-
-def today_entries(conn, table, kid_id, d):
-    """Manual entries for the current day, for the kid's one-tap ✕ remove (E3)."""
-    return conn.execute(
-        "SELECT id, minutes FROM %s WHERE kid_id=? AND log_date=? "
-        "AND source='manual' ORDER BY id" % table, (kid_id, d2s(d))).fetchall()
+    a = activity_by_key(conn, "outdoor")
+    return weekly_activity_total(conn, a["id"], kid_id, ws) if a else 0
 
 
 # --------------------------------------------------------------------------- #
@@ -528,10 +586,9 @@ def banner_state(conn, kid, d):
 
     ws = week_start(d)
     targets = prorated_targets(conn, kid, ws)
+    acts = activities(conn, enabled_only=True)
 
-    r_enabled = get_setting(conn, "reading_enabled", "1") != "0"
-    o_enabled = get_setting(conn, "outdoor_enabled", "1") != "0"
-    if not r_enabled and not o_enabled:
+    if not acts:
         # Chores-only mode: bonus tracks daily-checklist completion.
         required = required_checklist_days(conn, targets["active_days"])
         done, elapsed = checklist_days_this_week(conn, kid["id"], d)
@@ -540,16 +597,16 @@ def banner_state(conn, kid, d):
         days_left = max(0, targets["active_days"] - elapsed)
         return {"state": "on_track" if done + days_left >= required else "at_risk"}
 
-    r_cur = weekly_reading(conn, kid["id"], ws)
-    o_cur = weekly_outdoor(conn, kid["id"], ws)
-
-    r_met = r_cur >= targets["reading"]
-    o_met = o_cur >= targets["outdoor"]
-    if r_met and o_met:
+    all_met = on_pace = True
+    for a in acts:
+        cur = weekly_activity_total(conn, a["id"], kid["id"], ws)
+        tgt = targets["by_activity"].get(a["id"], 0)
+        if cur < tgt:
+            all_met = False
+        if not _on_pace(conn, tgt, cur, ws, d):
+            on_pace = False
+    if all_met:
         return {"state": "earned"}
-
-    on_pace = (_on_pace(conn, targets["reading"], r_cur, ws, d)
-               and _on_pace(conn, targets["outdoor"], o_cur, ws, d))
     return {"state": "on_track" if on_pace else "at_risk"}
 
 
@@ -712,21 +769,20 @@ def required_checklist_days(conn, active_days):
     return active_days if n <= 0 else min(n, active_days)
 
 
-def _bonus_earned(conn, r_sum, o_sum, targets, ck_done=0, ck_active=0):
+def _bonus_earned(conn, kid, ws, targets, ck_done=0, ck_active=0):
     """True when the kid has met the week's bonus condition.
 
-    With activities enabled, that's hitting every enabled activity target. With
-    both activities off (chores-only mode), it's finishing the daily checklist
-    on at least `required_checklist_days` of the week's active days.
+    With activities enabled, that's hitting every enabled activity's target. With
+    no activities (chores-only mode), it's finishing the daily checklist on at
+    least `required_checklist_days` of the week's active days.
     """
-    r_enabled = get_setting(conn, "reading_enabled", "1") != "0"
-    o_enabled = get_setting(conn, "outdoor_enabled", "1") != "0"
-    if not r_enabled and not o_enabled:
+    acts = activities(conn, enabled_only=True)
+    if not acts:
         return ck_done >= required_checklist_days(conn, ck_active)
-    if r_enabled and r_sum < targets["reading"]:
-        return False
-    if o_enabled and o_sum < targets["outdoor"]:
-        return False
+    for a in acts:
+        cur = weekly_activity_total(conn, a["id"], kid["id"], ws)
+        if cur < targets["by_activity"].get(a["id"], 0):
+            return False
     return True
 
 
@@ -738,38 +794,56 @@ def _finalize_week_for_kid(conn, kid, ws):
         return
 
     targets = prorated_targets(conn, kid, ws)
-    r_sum = weekly_reading(conn, kid["id"], ws)
-    o_sum = weekly_outdoor(conn, kid["id"], ws)
+    acts = activities(conn, enabled_only=True)
+    sums = {a["id"]: weekly_activity_total(conn, a["id"], kid["id"], ws) for a in acts}
 
-    if targets["active_days"] == 0:
-        # Fully paused week: no bonus eval, excluded from streak.
-        conn.execute(
-            "INSERT OR IGNORE INTO weekly_results (kid_id, week_start_date, "
-            "reading_minutes, outdoor_minutes, reading_target, outdoor_target, "
-            "active_days, is_paused_week, bonus_earned, computed_at) "
-            "VALUES (?,?,?,?,0,0,0,1,NULL,?)",
-            (kid["id"], d2s(ws), r_sum, o_sum, now_iso()))
-        return
+    # Legacy reading/outdoor columns are still written (rollback safety) when those
+    # activities exist; the weekly_result_activities child rows are authoritative.
+    r_act, o_act = activity_by_key(conn, "reading"), activity_by_key(conn, "outdoor")
+    r_sum = sums.get(r_act["id"], 0) if r_act else 0
+    o_sum = sums.get(o_act["id"], 0) if o_act else 0
+    r_tgt = targets["by_activity"].get(r_act["id"], 0) if r_act else 0
+    o_tgt = targets["by_activity"].get(o_act["id"], 0) if o_act else 0
 
-    ck_done, ck_active = checklist_days_in_week(conn, kid["id"], ws)
-    bonus = _bonus_earned(conn, r_sum, o_sum, targets, ck_done, ck_active)
+    paused = targets["active_days"] == 0
+    if paused:
+        bonus_val = None
+    else:
+        ck_done, ck_active = checklist_days_in_week(conn, kid["id"], ws)
+        bonus_val = 1 if _bonus_earned(conn, kid, ws, targets, ck_done, ck_active) else 0
+
     conn.execute(
         "INSERT OR IGNORE INTO weekly_results (kid_id, week_start_date, "
         "reading_minutes, outdoor_minutes, reading_target, outdoor_target, "
         "active_days, is_paused_week, bonus_earned, computed_at) "
-        "VALUES (?,?,?,?,?,?,?,0,?,?)",
-        (kid["id"], d2s(ws), r_sum, o_sum, targets["reading"], targets["outdoor"],
-         targets["active_days"], 1 if bonus else 0, now_iso()))
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (kid["id"], d2s(ws), r_sum, o_sum, r_tgt, o_tgt,
+         targets["active_days"], 1 if paused else 0, bonus_val, now_iso()))
+    wr_id = conn.execute(
+        "SELECT id FROM weekly_results WHERE kid_id=? AND week_start_date=?",
+        (kid["id"], d2s(ws))).fetchone()["id"]
+    for a in acts:
+        conn.execute(
+            "INSERT OR IGNORE INTO weekly_result_activities "
+            "(weekly_result_id, activity_id, amount, target) VALUES (?,?,?,?)",
+            (wr_id, a["id"], sums[a["id"]], 0 if paused else targets["by_activity"].get(a["id"], 0)))
 
-    if not bonus:
+    if bonus_val == 0:
         # Deficit is recoverable next Monday (v1.1 C).
         next_monday = ws + timedelta(days=7)
         conn.execute(
             "INSERT OR IGNORE INTO makeup_owed (kid_id, for_week_start, "
             "reading_deficit, outdoor_deficit, satisfied_at) VALUES (?,?,?,?,NULL)",
-            (kid["id"], d2s(next_monday),
-             max(0, targets["reading"] - r_sum),
-             max(0, targets["outdoor"] - o_sum)))
+            (kid["id"], d2s(next_monday), max(0, r_tgt - r_sum), max(0, o_tgt - o_sum)))
+        m_id = conn.execute(
+            "SELECT id FROM makeup_owed WHERE kid_id=? AND for_week_start=?",
+            (kid["id"], d2s(next_monday))).fetchone()["id"]
+        for a in acts:
+            deficit = max(0, targets["by_activity"].get(a["id"], 0) - sums[a["id"]])
+            if deficit:
+                conn.execute(
+                    "INSERT OR IGNORE INTO makeup_deficits (makeup_id, activity_id, deficit) "
+                    "VALUES (?,?,?)", (m_id, a["id"], deficit))
 
 
 # --------------------------------------------------------------------------- #
@@ -793,15 +867,18 @@ def check_makeup_reinstatement(conn, kid_id, d):
     row = open_makeup(conn, kid_id, d)
     if row is None:
         return None
-    r_today = today_minutes(conn, "reading_logs", kid_id, d)
-    o_today = today_minutes(conn, "outdoor_logs", kid_id, d)
     done, _ = checklist_status(conn, kid_id, d)
-    if r_today >= row["reading_deficit"] and o_today >= row["outdoor_deficit"] and done:
-        conn.execute("UPDATE makeup_owed SET satisfied_at=? WHERE id=?",
-                     (now_iso(), row["id"]))
-        conn.commit()
-        return row
-    return None
+    if not done:
+        return None
+    for md in conn.execute(
+            "SELECT activity_id, deficit FROM makeup_deficits WHERE makeup_id=?",
+            (row["id"],)).fetchall():
+        if today_activity_total(conn, md["activity_id"], kid_id, d) < md["deficit"]:
+            return None
+    conn.execute("UPDATE makeup_owed SET satisfied_at=? WHERE id=?",
+                 (now_iso(), row["id"]))
+    conn.commit()
+    return row
 
 
 def makeup_banner(conn, kid_id, d):
@@ -811,26 +888,40 @@ def makeup_banner(conn, kid_id, d):
     row = open_makeup(conn, kid_id, d)
     if row is None:
         return None
-    r_today = today_minutes(conn, "reading_logs", kid_id, d)
-    o_today = today_minutes(conn, "outdoor_logs", kid_id, d)
-    return {
-        "reading_left": max(0, row["reading_deficit"] - r_today),
-        "outdoor_left": max(0, row["outdoor_deficit"] - o_today),
-    }
+    items = []
+    for md in conn.execute(
+            "SELECT activity_id, deficit FROM makeup_deficits WHERE makeup_id=?",
+            (row["id"],)).fetchall():
+        a = activity_by_id(conn, md["activity_id"])
+        if a is None:
+            continue
+        left = max(0, md["deficit"] - today_activity_total(conn, md["activity_id"], kid_id, d))
+        if left > 0:
+            items.append({"label": a["label"], "unit": a["unit"], "left": left})
+    return {"items": items}
 
 
 # --------------------------------------------------------------------------- #
 # Summer scoreboard (v1.1 D)
 # --------------------------------------------------------------------------- #
 def kid_bonus_history(conn, kid_id, n=5):
-    """Last n finalized non-paused weeks for the kid's history section."""
+    """Last n finalized non-paused weeks for the kid's history section, each with a
+    per-activity breakdown drawn from weekly_result_activities."""
     rows = conn.execute(
-        "SELECT week_start_date, bonus_earned, reading_minutes, outdoor_minutes, "
-        "reading_target, outdoor_target FROM weekly_results "
+        "SELECT id, week_start_date, bonus_earned FROM weekly_results "
         "WHERE kid_id=? AND is_paused_week=0 "
         "ORDER BY week_start_date DESC LIMIT ?",
         (kid_id, n)).fetchall()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        acts = conn.execute(
+            "SELECT wra.amount, wra.target, a.label, a.unit "
+            "FROM weekly_result_activities wra JOIN activities a ON a.id = wra.activity_id "
+            "WHERE wra.weekly_result_id=? ORDER BY a.sort_order, a.id", (r["id"],)).fetchall()
+        out.append({"week_start_date": r["week_start_date"],
+                    "bonus_earned": r["bonus_earned"],
+                    "activities": [dict(x) for x in acts]})
+    return out
 
 
 def scoreboard(conn, kid_id):

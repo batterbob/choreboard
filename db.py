@@ -151,10 +151,64 @@ CREATE TABLE IF NOT EXISTS makeup_owed (
     id INTEGER PRIMARY KEY,
     kid_id INTEGER NOT NULL,
     for_week_start TEXT NOT NULL,    -- Monday of the week the make-up applies to
-    reading_deficit INTEGER NOT NULL DEFAULT 0,
-    outdoor_deficit INTEGER NOT NULL DEFAULT 0,
+    reading_deficit INTEGER NOT NULL DEFAULT 0,   -- legacy, kept for rollback
+    outdoor_deficit INTEGER NOT NULL DEFAULT 0,   -- legacy, kept for rollback
     satisfied_at TEXT,               -- set when the bonus is earned back
     UNIQUE (kid_id, for_week_start)
+);
+
+-- v2: generic activities replace the hardcoded reading/outdoor pair.
+CREATE TABLE IF NOT EXISTS activities (
+    id INTEGER PRIMARY KEY,
+    key TEXT UNIQUE NOT NULL,         -- stable slug: 'reading', 'outdoor', 'water'…
+    label TEXT NOT NULL,             -- display name
+    unit TEXT NOT NULL DEFAULT 'minutes',  -- 'minutes' | 'count'
+    enabled INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    supports_credit INTEGER NOT NULL DEFAULT 0,  -- can a special period auto-credit it
+    default_target INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS activity_targets (   -- per-kid weekly target
+    activity_id INTEGER NOT NULL,
+    kid_id INTEGER NOT NULL,
+    target INTEGER NOT NULL,
+    PRIMARY KEY (activity_id, kid_id)
+);
+
+CREATE TABLE IF NOT EXISTS activity_logs (      -- replaces reading_logs + outdoor_logs
+    id INTEGER PRIMARY KEY,
+    activity_id INTEGER NOT NULL,
+    kid_id INTEGER NOT NULL,
+    log_date TEXT NOT NULL,          -- YYYY-MM-DD local
+    amount INTEGER NOT NULL,         -- minutes, or a count
+    source TEXT NOT NULL DEFAULT 'manual',  -- 'manual' or 'credit_auto'
+    logged_at TEXT NOT NULL
+);
+
+-- Per-activity weekly history (child of weekly_results), so the activity count
+-- is no longer fixed at two.
+CREATE TABLE IF NOT EXISTS weekly_result_activities (
+    weekly_result_id INTEGER NOT NULL,
+    activity_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL,
+    target INTEGER NOT NULL,
+    PRIMARY KEY (weekly_result_id, activity_id)
+);
+
+-- Per-activity make-up deficits (child of makeup_owed).
+CREATE TABLE IF NOT EXISTS makeup_deficits (
+    makeup_id INTEGER NOT NULL,
+    activity_id INTEGER NOT NULL,
+    deficit INTEGER NOT NULL,
+    PRIMARY KEY (makeup_id, activity_id)
+);
+
+-- Per-activity pause during a special period (replaces pause_reading/pause_outdoor).
+CREATE TABLE IF NOT EXISTS special_period_paused_activities (
+    special_period_id INTEGER NOT NULL,
+    activity_id INTEGER NOT NULL,
+    PRIMARY KEY (special_period_id, activity_id)
 );
 """
 
@@ -217,12 +271,15 @@ def init_db(conn, env=None):
     _ensure_column(conn, "special_periods", "pause_outdoor", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "chores", "notes", "TEXT")
     _ensure_column(conn, "chores", "points", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "special_periods", "credit_activity_id", "INTEGER")
     _migrate_bins_to_scheduled(conn)
     conn.commit()
     if conn.execute("SELECT COUNT(*) AS n FROM kids").fetchone()["n"] == 0:
         _seed(conn, env)
     else:
         _migrate_daily_assignments(conn)   # existing DB: preserve daily-for-both
+        _ensure_default_activities(conn)
+        _migrate_legacy_activity_data(conn)
         # Non-destructive settings migration for existing DBs.
         _ensure_setting(conn, "app_name", env.get("APP_NAME", "ChoreBoard"))
         _ensure_setting(conn, "program_label", env.get("PROGRAM_LABEL", "Activity Tracker"))
@@ -237,6 +294,87 @@ def init_db(conn, env=None):
         _ensure_setting(conn, "dollars_per_point", "")
         _ensure_setting(conn, "setup_complete", "1")  # treat existing DBs as already set up
     conn.commit()
+
+
+def _ensure_default_activities(conn):
+    """Create the reading + outdoor activity rows if the table is empty, mirroring
+    the legacy reading/outdoor settings so existing installs keep their labels."""
+    if conn.execute("SELECT COUNT(*) AS n FROM activities").fetchone()["n"]:
+        return
+
+    def g(key, default):
+        row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return row["value"] if row and row["value"] is not None else default
+
+    reading_enabled = 1 if g("reading_enabled", "1") != "0" else 0
+    outdoor_enabled = 1 if g("outdoor_enabled", "1") != "0" else 0
+    conn.execute(
+        "INSERT INTO activities (key, label, unit, enabled, sort_order, "
+        "supports_credit, default_target) VALUES ('reading', ?, 'minutes', ?, 0, 0, 175)",
+        (g("reading_label", "Reading"), reading_enabled))
+    conn.execute(
+        "INSERT INTO activities (key, label, unit, enabled, sort_order, "
+        "supports_credit, default_target) VALUES ('outdoor', ?, 'minutes', ?, 1, 1, 300)",
+        (g("outdoor_label", "Outdoor Time"), outdoor_enabled))
+
+
+def _copy_legacy_logs(conn, table, activity_id):
+    for r in conn.execute(
+            "SELECT kid_id, log_date, minutes, source, logged_at FROM %s" % table).fetchall():
+        src = "credit_auto" if r["source"] == "camp_auto" else r["source"]
+        conn.execute(
+            "INSERT INTO activity_logs (activity_id, kid_id, log_date, amount, source, logged_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (activity_id, r["kid_id"], r["log_date"], r["minutes"], src, r["logged_at"]))
+
+
+def _migrate_legacy_activity_data(conn):
+    """One-time backfill of the new activity tables from the legacy reading/outdoor
+    columns. Idempotent (guarded by the activities_migrated setting). Leaves the old
+    tables/columns in place as a rollback safety net."""
+    if conn.execute(
+            "SELECT 1 FROM settings WHERE key='activities_migrated'").fetchone():
+        return
+    rid = conn.execute("SELECT id FROM activities WHERE key='reading'").fetchone()
+    oid = conn.execute("SELECT id FROM activities WHERE key='outdoor'").fetchone()
+    if rid and oid:
+        rid, oid = rid["id"], oid["id"]
+        for k in conn.execute(
+                "SELECT id, reading_target_minutes, outdoor_target_minutes FROM kids").fetchall():
+            conn.execute("INSERT OR IGNORE INTO activity_targets (activity_id, kid_id, target) "
+                         "VALUES (?,?,?)", (rid, k["id"], k["reading_target_minutes"]))
+            conn.execute("INSERT OR IGNORE INTO activity_targets (activity_id, kid_id, target) "
+                         "VALUES (?,?,?)", (oid, k["id"], k["outdoor_target_minutes"]))
+        _copy_legacy_logs(conn, "reading_logs", rid)
+        _copy_legacy_logs(conn, "outdoor_logs", oid)
+        for wr in conn.execute(
+                "SELECT id, reading_minutes, outdoor_minutes, reading_target, "
+                "outdoor_target FROM weekly_results").fetchall():
+            conn.execute("INSERT OR IGNORE INTO weekly_result_activities VALUES (?,?,?,?)",
+                         (wr["id"], rid, wr["reading_minutes"], wr["reading_target"]))
+            conn.execute("INSERT OR IGNORE INTO weekly_result_activities VALUES (?,?,?,?)",
+                         (wr["id"], oid, wr["outdoor_minutes"], wr["outdoor_target"]))
+        for m in conn.execute(
+                "SELECT id, reading_deficit, outdoor_deficit FROM makeup_owed").fetchall():
+            if m["reading_deficit"]:
+                conn.execute("INSERT OR IGNORE INTO makeup_deficits VALUES (?,?,?)",
+                             (m["id"], rid, m["reading_deficit"]))
+            if m["outdoor_deficit"]:
+                conn.execute("INSERT OR IGNORE INTO makeup_deficits VALUES (?,?,?)",
+                             (m["id"], oid, m["outdoor_deficit"]))
+        for sp in conn.execute(
+                "SELECT id, type, pause_reading, pause_outdoor FROM special_periods").fetchall():
+            if sp["pause_reading"]:
+                conn.execute("INSERT OR IGNORE INTO special_period_paused_activities "
+                             "VALUES (?,?)", (sp["id"], rid))
+            if sp["pause_outdoor"]:
+                conn.execute("INSERT OR IGNORE INTO special_period_paused_activities "
+                             "VALUES (?,?)", (sp["id"], oid))
+            if sp["type"] == "outdoor_credit":
+                conn.execute("UPDATE special_periods SET credit_activity_id=? "
+                             "WHERE id=? AND credit_activity_id IS NULL", (oid, sp["id"]))
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES "
+                 "('activities_migrated', '1')")
 
 
 def _migrate_daily_assignments(conn):
@@ -301,6 +439,10 @@ def _seed(conn, env):
     }
     conn.executemany("INSERT OR IGNORE INTO settings (key, value) VALUES (?,?)",
                      list(settings.items()))
+    # Fresh install: create the two default activities; nothing to migrate.
+    _ensure_default_activities(conn)
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES "
+                 "('activities_migrated', '1')")
 
 
 def seed_test_data(conn, env=None):
@@ -362,6 +504,18 @@ def seed_test_data(conn, env=None):
                      "outdoor_minutes_per_day) VALUES (?,?,?,?,?)",
                      [("Alaska cruise", "paused", "2026-07-03", "2026-07-14", None),
                       ("Congo camp", "outdoor_credit", "2026-07-20", "2026-07-31", 60)])
+
+    # v2 activity tables: targets per kid + point the credit period at outdoor.
+    rid = conn.execute("SELECT id FROM activities WHERE key='reading'").fetchone()["id"]
+    oid = conn.execute("SELECT id FROM activities WHERE key='outdoor'").fetchone()["id"]
+    for k in conn.execute(
+            "SELECT id, reading_target_minutes, outdoor_target_minutes FROM kids").fetchall():
+        conn.execute("INSERT OR IGNORE INTO activity_targets (activity_id, kid_id, target) "
+                     "VALUES (?,?,?)", (rid, k["id"], k["reading_target_minutes"]))
+        conn.execute("INSERT OR IGNORE INTO activity_targets (activity_id, kid_id, target) "
+                     "VALUES (?,?,?)", (oid, k["id"], k["outdoor_target_minutes"]))
+    conn.execute("UPDATE special_periods SET credit_activity_id=? WHERE type='outdoor_credit'",
+                 (oid,))
 
     conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES "
                  "('program_start_date', '2026-06-22')")
