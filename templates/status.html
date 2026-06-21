@@ -73,21 +73,13 @@
           {% endfor %}
         {% endif %}
 
-        {# Reading #}
-        {% if reading_enabled %}
+        {# Activities #}
+        {% for a in c.activities %}
         <div class="status-metric">
-          <div class="status-metric-head"><span>{{ reading_label }}</span><span>{{ c.reading.weekly }} / {{ c.reading.target }} min</span></div>
-          <div class="bar"><div class="bar-fill" style="width: {{ c.reading.pct }}%"></div></div>
+          <div class="status-metric-head"><span>{{ a.label }}</span><span>{{ a.weekly_disp }} / {{ a.target_disp }}{% if a.unit_label %} {{ a.unit_label }}{% endif %}</span></div>
+          <div class="bar"><div class="bar-fill" style="width: {{ a.pct }}%"></div></div>
         </div>
-        {% endif %}
-
-        {# Outdoor #}
-        {% if outdoor_enabled %}
-        <div class="status-metric">
-          <div class="status-metric-head"><span>{{ outdoor_label }}</span><span>{{ c.outdoor.weekly_hm }} / {{ c.outdoor.target_hm }}</span></div>
-          <div class="bar"><div class="bar-fill" style="width: {{ c.outdoor.pct }}%"></div></div>
-        </div>
-        {% endif %}
+        {% endfor %}
 
         {# Last week's bonus #}
         {% if c.last_week_bonus is none %}

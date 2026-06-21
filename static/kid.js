@@ -200,6 +200,8 @@
     };
   }
 
+  function unitSuffix(st) { return st.unit === "count" ? "" : " min"; }
+
   function renderTotals(section, weekly, today) {
     var st = sectionState(section);
     section.setAttribute("data-weekly", String(weekly));
@@ -209,11 +211,11 @@
     if (st.unit === "hm") {
       wt.textContent = "This week: " + hm(weekly) + " / " + hm(st.target);
     } else {
-      wt.textContent = "This week: " + weekly + " / " + st.target + " min";
+      wt.textContent = "This week: " + weekly + " / " + st.target;
     }
     var pct = st.target > 0 ? Math.min(100, Math.floor(weekly / st.target * 100)) : 0;
     $(".bar-fill", section).style.width = pct + "%";
-    $(".today-text", section).textContent = "Today: " + today + " min logged";
+    $(".today-text", section).textContent = "Today: " + today + unitSuffix(st) + " logged";
   }
 
   function renderPace(section, data) {
@@ -255,7 +257,7 @@
       setTimeout(function () { sourceEl.classList.remove("flash"); }, 250);
     }
     startPending(
-      "+" + minutes + " min added — Undo",
+      "+" + minutes + unitSuffix(st) + " added — Undo",
       function () {
         api("POST", "/api/log", { kind: kind, minutes: minutes })
           .then(function (r) { return r.ok ? r.json() : null; })

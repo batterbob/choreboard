@@ -73,10 +73,8 @@
               <div class="status-line status-break">On break — week didn't count</div>
             {% else %}
               <div class="status-line">Checklist: <strong>{{ k.checklist_days }}/{{ k.checklist_active }} days</strong></div>
-              {% if reading_enabled %}<div class="status-line">{{ reading_label }}: {{ k.reading }}/{{ k.reading_target }} min
-                {{ '✓' if k.reading_met else '✗' }}</div>{% endif %}
-              {% if outdoor_enabled %}<div class="status-line">{{ outdoor_label }}: {{ k.outdoor_hm }}/{{ k.outdoor_target_hm }}
-                {{ '✓' if k.outdoor_met else '✗' }}</div>{% endif %}
+              {% for a in k.activities %}<div class="status-line">{{ a.label }}: {{ a.weekly_disp }}/{{ a.target_disp }}
+                {{ '✓' if a.met else '✗' }}</div>{% endfor %}
               <div class="status-line {{ 'status-good' if k.bonus else 'status-bad' }}">
                 Bonus: {{ 'earned ✓' if k.bonus else 'not earned ✗' }}</div>
               {% if k.breakdown %}

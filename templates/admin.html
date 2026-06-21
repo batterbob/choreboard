@@ -139,36 +139,15 @@
         {% if points_enabled %}<div class="status-line">Points this week: <strong>{{ c.week_points }}</strong></div>{% endif %}
 
         {% if c.prorated %}
-          <div class="proration-note">Targets prorated to {{ c.active_days }}/7 days:
-            {% if reading_enabled %}{{ reading_label }} {{ c.reading_target }} min{% endif %}
-            {% if reading_enabled and outdoor_enabled %}, {% endif %}
-            {% if outdoor_enabled %}{{ outdoor_label }} {{ c.outdoor_target }} min{% endif %}
-          </div>
+          <div class="proration-note">Targets prorated to {{ c.active_days }}/7 active days this week.</div>
         {% endif %}
 
-        {% if reading_enabled %}
+        {% for a in c.activities %}
         <div class="status-metric">
-          <div class="status-metric-head"><span>{{ reading_label }}</span><span>{{ c.reading.weekly }} / {{ c.reading.target }} min</span></div>
-          <div class="bar"><div class="bar-fill" style="width: {{ [ (c.reading.weekly * 100 // c.reading.target) if c.reading.target else 0, 100] | min }}%"></div></div>
-          <div class="pace-text">
-            {% if c.reading.met %}Goal met ✓
-            {% elif c.reading.pace_state == "behind" %}Need ~{{ c.reading.pace_needed }} min/day
-            {% elif c.reading.pace_state == "no_days_left" %}Week over{% endif %}
-          </div>
+          <div class="status-metric-head"><span>{{ a.label }}</span><span>{{ a.weekly_disp }} / {{ a.target_disp }}{% if a.unit_label %} {{ a.unit_label }}{% endif %}</span></div>
+          <div class="bar"><div class="bar-fill" style="width: {{ a.pct }}%"></div></div>
         </div>
-        {% endif %}
-
-        {% if outdoor_enabled %}
-        <div class="status-metric">
-          <div class="status-metric-head"><span>{{ outdoor_label }}</span><span>{{ c.outdoor.weekly_hm }} / {{ c.outdoor.target_hm }}</span></div>
-          <div class="bar"><div class="bar-fill" style="width: {{ [ (c.outdoor.weekly * 100 // c.outdoor.target) if c.outdoor.target else 0, 100] | min }}%"></div></div>
-          <div class="pace-text">
-            {% if c.outdoor.met %}Goal met ✓
-            {% elif c.outdoor.pace_state == "behind" %}Need ~{{ c.outdoor.pace_needed }} min/day
-            {% elif c.outdoor.pace_state == "no_days_left" %}Week over{% endif %}
-          </div>
-        </div>
-        {% endif %}
+        {% endfor %}
 
         {% if c.last_week_bonus is none %}
           <div class="status-bonus status-muted">Last week's bonus: —</div>
