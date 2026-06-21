@@ -365,6 +365,27 @@ def checklist_days_in_week(conn, kid_id, ws):
     return completed, active
 
 
+def weekly_points(conn, kid_id, ws):
+    """Total chore points a kid earned in the Mon-Sun week starting at ws.
+
+    Sums `chores.points` over every completion that week — both checklist-style
+    completions (chore_completions) and finished as-needed assignments.
+    """
+    a, b = d2s(ws), d2s(week_end(ws))
+    checklist = conn.execute(
+        "SELECT COALESCE(SUM(c.points), 0) AS pts FROM chore_completions cc "
+        "JOIN chores c ON c.id = cc.chore_id "
+        "WHERE cc.kid_id=? AND cc.completion_date>=? AND cc.completion_date<=?",
+        (kid_id, a, b)).fetchone()["pts"]
+    asneeded = conn.execute(
+        "SELECT COALESCE(SUM(c.points), 0) AS pts FROM as_needed_assignments an "
+        "JOIN chores c ON c.id = an.chore_id "
+        "WHERE an.kid_id=? AND an.completed_at IS NOT NULL "
+        "AND substr(an.completed_at,1,10)>=? AND substr(an.completed_at,1,10)<=?",
+        (kid_id, a, b)).fetchone()["pts"]
+    return (checklist or 0) + (asneeded or 0)
+
+
 # --------------------------------------------------------------------------- #
 # Weekly chores (v1.2) — standing per-kid assignments, done once per week.
 # --------------------------------------------------------------------------- #

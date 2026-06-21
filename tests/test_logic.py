@@ -245,6 +245,37 @@ class ChoresOnlyBonus(unittest.TestCase):
         self.assertEqual(self._bonus(), 1)
 
 
+class ChorePoints(unittest.TestCase):
+    def setUp(self):
+        self.conn = fresh_db()
+        self.a = kid_id(self.conn, "alex")
+        self.ws = date(2026, 6, 22)
+
+    def test_points_sum_for_week(self):
+        self.conn.execute("UPDATE chores SET points=5 WHERE type='daily'")
+        self.conn.commit()
+        complete_checklist(self.conn, self.a, date(2026, 6, 24))
+        n_daily = self.conn.execute(
+            "SELECT COUNT(*) AS n FROM chores WHERE type='daily'").fetchone()["n"]
+        self.assertEqual(logic.weekly_points(self.conn, self.a, self.ws), 5 * n_daily)
+
+    def test_points_outside_week_excluded(self):
+        self.conn.execute("UPDATE chores SET points=5 WHERE type='daily'")
+        self.conn.commit()
+        complete_checklist(self.conn, self.a, date(2026, 6, 15))  # the prior week
+        self.assertEqual(logic.weekly_points(self.conn, self.a, self.ws), 0)
+
+    def test_as_needed_points_counted(self):
+        ch = self.conn.execute(
+            "SELECT id FROM chores WHERE type='as_needed' LIMIT 1").fetchone()["id"]
+        self.conn.execute("UPDATE chores SET points=3 WHERE id=?", (ch,))
+        self.conn.execute(
+            "INSERT INTO as_needed_assignments (kid_id, chore_id, assigned_at, completed_at) "
+            "VALUES (?,?,?,?)", (self.a, ch, logic.now_iso(ENV), "2026-06-24T10:00:00"))
+        self.conn.commit()
+        self.assertEqual(logic.weekly_points(self.conn, self.a, self.ws), 3)
+
+
 class WeeklyChores(unittest.TestCase):
     def setUp(self):
         self.conn = fresh_db()

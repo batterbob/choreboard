@@ -194,6 +194,20 @@
         <span class="set-hint">Chores-only mode: with no activities enabled, the bonus is earned by finishing the daily checklist on this many days each week.</span>
       </div>
       {% endif %}
+      <div class="set-row">
+        <label style="display:flex;flex-direction:row;gap:.5rem;align-items:center">
+          <input type="checkbox" name="points_enabled"{{ ' checked' if points_enabled_val else '' }}>
+          Reward chores with points
+        </label>
+        <span class="set-hint">Give each chore a point value (set per chore on the dashboard). Kids see points earned this week.</span>
+      </div>
+      <div class="set-row">
+        <label>Dollars per point (blank to show points only)
+          <input type="number" name="dollars_per_point" value="{{ dollars_per_point }}"
+                 min="0" step="0.05" class="set-num" placeholder="e.g. 0.25">
+        </label>
+        <span class="set-hint">When set, the kid's page also shows this week's points as a dollar amount.</span>
+      </div>
       <button class="mini-btn primary" type="submit">Save</button>
     </form>
   </section>

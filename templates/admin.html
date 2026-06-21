@@ -136,6 +136,8 @@
 
         <div class="status-line">Checklist done: <strong>{{ c.checklist_days }} of {{ c.checklist_elapsed }} days</strong> so far this week</div>
 
+        {% if points_enabled %}<div class="status-line">Points this week: <strong>{{ c.week_points }}</strong></div>{% endif %}
+
         {% if c.prorated %}
           <div class="proration-note">Targets prorated to {{ c.active_days }}/7 days:
             {% if reading_enabled %}{{ reading_label }} {{ c.reading_target }} min{% endif %}
@@ -252,7 +254,7 @@
   <h2 class="admin-section-h">Chores</h2>
   <section class="card">
     <table class="chore-table">
-      <tr><th>Name</th><th>Type</th><th>Who does it</th><th>Active</th><th>Edit</th><th></th></tr>
+      <tr><th>Name</th><th>Type</th><th>Who does it</th><th>Active</th>{% if points_enabled %}<th>Points</th>{% endif %}<th>Edit</th><th></th></tr>
       {% for ch in all_chores %}
         <tr>
           <td>{{ ch.name }}</td>
@@ -277,6 +279,7 @@
               <button class="mini-btn {{ 'on' if ch.active else 'off' }}">{{ 'On' if ch.active else 'Off' }}</button>
             </form>
           </td>
+          {% if points_enabled %}<td>{{ ch.points }}</td>{% endif %}
           <td>
             <button class="mini-btn" type="button" onclick="toggleEdit({{ ch.id }})">Edit</button>
           </td>
@@ -289,7 +292,7 @@
           </td>
         </tr>
         <tr id="edit-{{ ch.id }}" class="edit-row" hidden>
-          <td colspan="6">
+          <td colspan="{{ 7 if points_enabled else 6 }}">
             <form method="post" action="/admin/chore/edit" class="add-form">
               {{ today_field() }}<input type="hidden" name="chore_id" value="{{ ch.id }}">
               <input type="text" name="name" value="{{ ch.name }}" class="add-name" required>
@@ -302,6 +305,8 @@
               </select>
               {{ schedule_fields(ch) }}
               {{ alt_fields(ch) }}
+              {% if points_enabled %}<label class="set-hint" style="margin:0 .25rem">Points
+                <input type="number" name="points" value="{{ ch.points }}" min="0" class="set-num"></label>{% endif %}
               <button class="mini-btn primary" type="submit">Save</button>
               <button class="mini-btn" type="button" onclick="toggleEdit({{ ch.id }})">Cancel</button>
             </form>
@@ -321,6 +326,8 @@
       </select>
       {{ schedule_fields() }}
       {{ alt_fields() }}
+      {% if points_enabled %}<label class="set-hint" style="margin:0 .25rem">Points
+        <input type="number" name="points" value="0" min="0" class="set-num"></label>{% endif %}
       <button class="mini-btn primary" type="submit">Add chore</button>
     </form>
     <div class="set-hint" style="line-height:1.5">

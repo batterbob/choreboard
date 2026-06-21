@@ -245,6 +245,17 @@ def kid_view(conn, kid, d):
         except ValueError:
             pass
 
+    # Per-chore points (optional, off by default)
+    points_enabled = logic.get_setting(conn, "points_enabled", "0") == "1"
+    week_points = logic.weekly_points(conn, kid["id"], ws) if points_enabled else None
+    points_dollars = None
+    dpp_str = logic.get_setting(conn, "dollars_per_point", "") or ""
+    if points_enabled and dpp_str:
+        try:
+            points_dollars = float(dpp_str) * week_points
+        except ValueError:
+            pass
+
     debug = os.environ.get("CHORE_DEBUG", "0") in ("1", "true", "True")
     return {
         "kid": kid,
@@ -269,6 +280,9 @@ def kid_view(conn, kid, d):
         "bonus_history": bonus_history,
         "bonus_dollars": bonus_dollars,
         "total_earned": total_earned,
+        "points_enabled": points_enabled,
+        "week_points": week_points,
+        "points_dollars": points_dollars,
         "reading_quick": [15, 25, 30, 60],
         "outdoor_quick": [15, 30, 60, 90],
     }
@@ -321,6 +335,7 @@ def admin_view(conn, d):
     logic.ensure_rotation_for_week(conn, d)
 
     ws = logic.week_start(d)
+    points_enabled = logic.get_setting(conn, "points_enabled", "0") == "1"
     cards = []
     for kid in logic.active_kids(conn):
         done, completed_at = logic.checklist_status(conn, kid["id"], d)
@@ -332,6 +347,7 @@ def admin_view(conn, d):
             "id": kid["id"],
             "name": kid["name"],
             "slug": kid["url_slug"],
+            "week_points": logic.weekly_points(conn, kid["id"], ws) if points_enabled else None,
             "checklist_done": done,
             "completed_time": _fmt_time(completed_at),
             "on_break": logic.is_paused(conn, d),
@@ -361,7 +377,7 @@ def admin_view(conn, d):
     chore_rows = []
     for r in conn.execute(
             "SELECT id, name, type, active, is_rotating, due_weekday, "
-            "reminder_lead_days, due_label, alt_day_parity FROM chores WHERE deleted=0 "
+            "reminder_lead_days, due_label, alt_day_parity, points FROM chores WHERE deleted=0 "
             "ORDER BY type, id").fetchall():
         chore_rows.append(dict(r, assigned_ids=sorted(assigned_map.get(r["id"], set()))))
 
@@ -379,6 +395,7 @@ def admin_view(conn, d):
         "rotation": logic.rotation_table(conn, d),
         "debug_today": logic.d2s(d) if debug else None,
         "setup_done": request.args.get("setup_done"),
+        "points_enabled": points_enabled,
     }
 
 
@@ -436,6 +453,8 @@ def settings_view(conn):
         "reward": g("scoreboard_reward_text", ""),
         "bonus_dollar_amount": g("bonus_dollar_amount", ""),
         "checklist_min_days": g("checklist_min_days", ""),
+        "points_enabled_val": g("points_enabled", "0") == "1",
+        "dollars_per_point": g("dollars_per_point", ""),
         "notify_service": g("notify_service", "none"),
         "notify_pushover_app_token": g("notify_pushover_app_token", ""),
         "notify_pushover_user_key": g("notify_pushover_user_key", ""),
@@ -629,11 +648,12 @@ def admin_chore_add():
         wd, lead, label = _schedule_fields(ctype)
         parity = _alt_daily_fields(ctype)
         notes = (request.form.get("notes") or "").strip()
+        points = _int_or_none(request.form.get("points")) or 0
         conn.execute(
             "INSERT INTO chores (name, type, is_rotating, active, deleted, "
-            "created_at, due_weekday, reminder_lead_days, due_label, alt_day_parity, notes) "
-            "VALUES (?,?,0,1,0,?,?,?,?,?,?)",
-            (name, ctype, logic.now_iso(), wd, lead, label, parity, notes or None))
+            "created_at, due_weekday, reminder_lead_days, due_label, alt_day_parity, notes, points) "
+            "VALUES (?,?,0,1,0,?,?,?,?,?,?,?)",
+            (name, ctype, logic.now_iso(), wd, lead, label, parity, notes or None, max(0, points)))
         conn.commit()
     return _admin_redirect()
 
@@ -654,10 +674,12 @@ def admin_chore_edit():
         wd, lead, label = _schedule_fields(ctype)
         parity = _alt_daily_fields(ctype)
         notes = (request.form.get("notes") or "").strip()
+        points = max(0, _int_or_none(request.form.get("points")) or 0)
         conn.execute(
             "UPDATE chores SET name=?, type=?, is_rotating=?, due_weekday=?, "
-            "reminder_lead_days=?, due_label=?, alt_day_parity=?, notes=? WHERE id=? AND deleted=0",
-            (name, ctype, rot, wd, lead, label, parity, notes or None, chore_id))
+            "reminder_lead_days=?, due_label=?, alt_day_parity=?, notes=?, points=? "
+            "WHERE id=? AND deleted=0",
+            (name, ctype, rot, wd, lead, label, parity, notes or None, points, chore_id))
         conn.commit()
     return _admin_redirect()
 
@@ -963,6 +985,10 @@ def admin_settings_general():
                       (request.form.get("bonus_dollar_amount") or "").strip())
     min_days = (request.form.get("checklist_min_days") or "").strip()
     logic.set_setting(conn, "checklist_min_days", min_days if min_days.isdigit() else "")
+    logic.set_setting(conn, "points_enabled",
+                      "1" if request.form.get("points_enabled") else "0")
+    dpp = (request.form.get("dollars_per_point") or "").strip()
+    logic.set_setting(conn, "dollars_per_point", dpp)
     conn.commit()
     return redirect("/admin/settings?saved=1")
 

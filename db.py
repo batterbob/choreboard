@@ -216,6 +216,7 @@ def init_db(conn, env=None):
     _ensure_column(conn, "special_periods", "pause_reading", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "special_periods", "pause_outdoor", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "chores", "notes", "TEXT")
+    _ensure_column(conn, "chores", "points", "INTEGER NOT NULL DEFAULT 0")
     _migrate_bins_to_scheduled(conn)
     conn.commit()
     if conn.execute("SELECT COUNT(*) AS n FROM kids").fetchone()["n"] == 0:
@@ -232,6 +233,8 @@ def init_db(conn, env=None):
         _ensure_setting(conn, "notify_urls", "")
         _ensure_setting(conn, "passphrase_required", "0")
         _ensure_setting(conn, "bonus_dollar_amount", "")
+        _ensure_setting(conn, "points_enabled", "0")
+        _ensure_setting(conn, "dollars_per_point", "")
         _ensure_setting(conn, "setup_complete", "1")  # treat existing DBs as already set up
     conn.commit()
 
@@ -284,6 +287,8 @@ def _seed(conn, env):
         "outdoor_enabled": "1",
         "notify_urls": env.get("NOTIFY_URLS", ""),
         "passphrase_required": "0",
+        "points_enabled": "0",
+        "dollars_per_point": "",
         "admin_password_hash": _hash_password(env.get("ADMIN_PASSWORD", "changeme")),
         "week_start_day": "monday",
         "timezone": env.get("TZ", "America/New_York"),

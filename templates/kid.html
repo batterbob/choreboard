@@ -34,6 +34,9 @@
       {% if total_earned is not none %}
         <span class="allowance-earned">💰 ${{ "%.2f"|format(total_earned) }} total earned</span>
       {% endif %}
+      {% if points_enabled %}
+        <span class="allowance-earned">🏅 {{ week_points }} point{{ "s" if week_points != 1 else "" }} this week{% if points_dollars is not none %} · ${{ "%.2f"|format(points_dollars) }}{% endif %}</span>
+      {% endif %}
     </div>
     {% if reward %}<div class="reward-line">🎯 {{ reward }}</div>{% endif %}
 

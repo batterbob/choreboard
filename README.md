@@ -55,6 +55,7 @@ It works great for the summer, the school year, or all year round — you set th
 - **Chores** come in a few flavors: every day, every other day, once a week, on a specific weekday with a countdown, or one-off "do this today" assignments.
 - **Activities** are optional things you track in minutes — reading and outdoor time out of the box, and you can rename them or turn them off entirely.
 - **The bonus.** Each week a kid who hits their goals earns a star and the reward you set. If you turn activities off, the bonus is simply about finishing the daily checklist — you choose how many days a week count.
+- **Points (optional).** Give each chore a point value and kids rack up points as they go — handy for a pocket-money system. Set a dollars-per-point rate and the page shows what they've earned this week.
 - **Reminders.** ChoreBoard can send you a phone notification mid-morning if a kid hasn't finished, plus a Sunday-evening wrap-up of the week.
 - **Vacations.** Mark a trip or camp and ChoreBoard pauses chores (or auto-credits outdoor time) so a week off doesn't break anyone's streak.
 
