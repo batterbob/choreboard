@@ -1,6 +1,6 @@
 # ChoreBoard
 
-A self-hosted web app for keeping kids on track during a structured program — summer, school year, whatever you're running. Kids check off daily chores and log reading and outdoor time on their own. Parents get a read-only status page and a password-protected admin dashboard.
+A self-hosted web app for keeping kids on track during a structured program — summer, school year, whatever you're running. Kids check off daily chores and log reading and outdoor time on their own. Parents get a read-only status page and a password-protected admin dashboard. There area also built-in notiications to services like Pushover and others.
 
 Plain Flask + SQLite + vanilla JS. Runs as a single Docker container. No build step, no database server to manage.
 
@@ -10,7 +10,7 @@ Plain Flask + SQLite + vanilla JS. Runs as a single Docker container. No build s
 
 Kids get their own page (by URL — no login needed) with a daily checklist, weekly chores, and activity logs. Each week, if they hit their reading and outdoor targets, they earn a bonus star. The admin dashboard shows you everything at a glance: today's checklist status, weekly progress, and activity totals.
 
-A scheduler fires a mid-morning reminder if a kid's checklist isn't done, and a Sunday evening summary of the week. Vacations and special periods pause or credit activities automatically.
+A scheduler fires a mid-morning reminder via a notification service (e.g. Pushover) if a kid's checklist isn't done, and a Sunday evening summary of the week. Vacations and special periods pause or credit activities automatically.
 
 ---
 
